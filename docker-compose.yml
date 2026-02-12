@@ -1,0 +1,19 @@
+services:
+  hapi-hub:
+    image: ghcr.io/qyhfrank/hapi:latest
+    container_name: hapi-hub
+    ports:
+      - "3006:3006"
+    volumes:
+      - hapi-data:/data
+    environment:
+      HAPI_HOME: /data
+      HAPI_LISTEN_HOST: 0.0.0.0
+      HAPI_LISTEN_PORT: 3006
+      HAPI_PUBLIC_URL: ${HAPI_PUBLIC_URL:-http://localhost:3006}
+      CLI_API_TOKEN: ${CLI_API_TOKEN:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    restart: unless-stopped
+
+volumes:
+  hapi-data:
