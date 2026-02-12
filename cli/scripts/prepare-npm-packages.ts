@@ -188,7 +188,7 @@ async function preparePlatform(
     console.log(`Copied: ${srcBin} -> ${destBin}`);
 }
 
-function updateMainPackageOptionalDeps(version: string): void {
+function updateMainPackageForPublish(version: string): void {
     const pkgPath = join(projectRoot, 'package.json');
     const content = readFileSync(pkgPath, 'utf-8');
     const pkg = JSON.parse(content);
@@ -200,8 +200,19 @@ function updateMainPackageOptionalDeps(version: string): void {
 
     pkg.optionalDependencies = buildOptionalDependencies(version);
 
+    // Strip workspace: protocol dependencies -- these are monorepo-internal
+    // packages already bundled into the binary at build time
+    if (pkg.dependencies) {
+        for (const [name, version] of Object.entries(pkg.dependencies)) {
+            if (typeof version === 'string' && version.startsWith('workspace:')) {
+                console.log(`Removing workspace dependency: ${name} (${version})`);
+                delete pkg.dependencies[name];
+            }
+        }
+    }
+
     writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
-    console.log(`Updated optionalDependencies in package.json to version ${version}`);
+    console.log(`Updated package.json for publishing (version ${version})`);
 }
 
 async function main(): Promise<void> {
@@ -210,8 +221,8 @@ async function main(): Promise<void> {
     const mainPkg = await readMainPackageJson();
     console.log(`Version: ${mainPkg.version}\n`);
 
-    // Update optionalDependencies in main package.json
-    updateMainPackageOptionalDeps(mainPkg.version);
+    // Update package.json for npm publishing
+    updateMainPackageForPublish(mainPkg.version);
 
     const distExeDir = join(projectRoot, 'dist-exe');
     const npmDir = join(projectRoot, 'npm');
