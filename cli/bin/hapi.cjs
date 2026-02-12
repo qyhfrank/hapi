@@ -9,8 +9,11 @@ const pkgName = `@frankqing/hapi-${platform}-${arch}`;
 
 function getBinaryPath() {
     try {
-        // Try to find the platform-specific package
-        const pkgPath = require.resolve(`${pkgName}/package.json`);
+        // Resolve from this script's directory so nested node_modules are found
+        // when installed globally (npm hoists optionalDeps under the package)
+        const pkgPath = require.resolve(`${pkgName}/package.json`, {
+            paths: [path.join(__dirname, '..')]
+        });
         const binName = platform === 'win32' ? 'hapi.exe' : 'hapi';
         return path.join(path.dirname(pkgPath), 'bin', binName);
     } catch (e) {
