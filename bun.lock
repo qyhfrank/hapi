@@ -12,7 +12,7 @@
     },
     "cli": {
       "name": "@frankqing/hapi",
-      "version": "0.15.4",
+      "version": "0.15.5",
       "bin": {
         "hapi": "bin/hapi.cjs",
       },
@@ -42,11 +42,11 @@
         "vitest": "^4.0.16",
       },
       "optionalDependencies": {
-        "@frankqing/hapi-darwin-arm64": "0.15.4",
-        "@frankqing/hapi-darwin-x64": "0.15.4",
-        "@frankqing/hapi-linux-arm64": "0.15.4",
-        "@frankqing/hapi-linux-x64": "0.15.4",
-        "@frankqing/hapi-win32-x64": "0.15.4",
+        "@frankqing/hapi-darwin-arm64": "0.15.5",
+        "@frankqing/hapi-darwin-x64": "0.15.5",
+        "@frankqing/hapi-linux-arm64": "0.15.5",
+        "@frankqing/hapi-linux-x64": "0.15.5",
+        "@frankqing/hapi-win32-x64": "0.15.5",
       },
     },
     "docs": {
@@ -578,14 +578,6 @@
     "@floating-ui/utils": ["@floating-ui/utils@0.2.10", "", {}, "sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ=="],
 
     "@frankqing/hapi": ["@frankqing/hapi@workspace:cli"],
-
-    "@frankqing/hapi-darwin-arm64": ["@frankqing/hapi-darwin-arm64@0.15.4", "", { "os": "darwin", "cpu": "arm64", "bin": { "hapi": "bin/hapi" } }, "sha512-USzd8gp8vT00Mp0wEojKqGl6TU7DxZ7ahApp+XflCXoxvpo77+OvBQtUaTpbU1joT/B5Cw8PLk7tDFTrCS2AdQ=="],
-
-    "@frankqing/hapi-darwin-x64": ["@frankqing/hapi-darwin-x64@0.15.4", "", { "os": "darwin", "cpu": "x64", "bin": { "hapi": "bin/hapi" } }, "sha512-UkT1a6DqULST7j74GI0A6m+mRArqxmORcQ4XUVcHpI/8GfpxLz+Ws2dHaHA6+ol8AvbpQMr5fmRGul1M5eggMg=="],
-
-    "@frankqing/hapi-linux-arm64": ["@frankqing/hapi-linux-arm64@0.15.4", "", { "os": "linux", "cpu": "arm64", "bin": { "hapi": "bin/hapi" } }, "sha512-J2VQ2I3VLCPtVRelqGAPp8MSasADgQM4nWGKaZrB0/yQo+Sd9/eeCsW3ywOT485DRST8cj7i/chJAEI8GD3yhQ=="],
-
-    "@frankqing/hapi-linux-x64": ["@frankqing/hapi-linux-x64@0.15.4", "", { "os": "linux", "cpu": "x64", "bin": { "hapi": "bin/hapi" } }, "sha512-eRqmAwPkB8++2zeQ/TieREx2KLkvqDww5AXI9Afu3oC1WEGJwtHjj6kuXmTY/hC6LjnJJxPBJy7CMKQeVMpyyw=="],
 
     "@grammyjs/types": ["@grammyjs/types@3.22.2", "", {}, "sha512-uu7DX2ezhnBPozL3bXHmwhLvaFsh59E4QyviNH4Cij7EdVekYrs6mCzeXsa2pDk30l3uXo7DBahlZLzTPtpYZg=="],
 
