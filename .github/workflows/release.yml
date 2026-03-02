@@ -66,5 +66,3 @@ jobs:
               --title "Release ${GITHUB_REF#refs/tags/}" \
               --generate-notes \
               cli/release-artifacts/*
-
-
