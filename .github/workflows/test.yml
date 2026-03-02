@@ -2,24 +2,7 @@ name: Test
 
 on:
   push:
-    branches: [main]
-    paths-ignore:
-      - 'docs/**'
-      - 'website/**'
-      - '*.md'
-      - 'LICENSE'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/FUNDING.yml'
-      - '.github/prompts/**'
   pull_request:
-    paths-ignore:
-      - 'docs/**'
-      - 'website/**'
-      - '*.md'
-      - 'LICENSE'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/FUNDING.yml'
-      - '.github/prompts/**'
 
 jobs:
   test:
