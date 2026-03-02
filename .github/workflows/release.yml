@@ -67,17 +67,4 @@ jobs:
               --generate-notes \
               cli/release-artifacts/*
 
-  homebrew:
-    needs: release
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
-      - name: Update Homebrew formula
-        env:
-          GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
-          cd cli && bun run update-homebrew-formula --version "$VERSION" --push
+
