@@ -20,8 +20,8 @@ https://github.com/user-attachments/assets/38230353-94c6-4dbe-9c29-b2a2cc457546
 ## Getting Started
 
 ```bash
-npx @twsxtd/hapi hub --relay     # start hub with E2E encrypted relay
-npx @twsxtd/hapi                 # run claude code
+npx @frankqing/hapi hub --relay     # start hub with E2E encrypted relay
+npx @frankqing/hapi                 # run claude code
 ```
 
 `hapi server` remains supported as an alias.
@@ -46,6 +46,10 @@ For self-hosted options (Cloudflare Tunnel, Tailscale), see [Installation](docs/
 bun install
 bun run build:single-exe
 ```
+
+## Discussion
+
+- Telegram: [@veryhapi](https://t.me/veryhapi)
 
 ## Credits
 

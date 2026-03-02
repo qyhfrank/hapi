@@ -70,8 +70,10 @@ HAPI has three components:
 ## Install the CLI
 
 ```bash
-npm install -g @twsxtd/hapi
+npm install -g @frankqing/hapi --registry=https://registry.npmjs.org
 ```
+
+> Recommendation: use the official npm registry for global install. Some mirrors may not sync platform packages in time.
 
 Or with Homebrew:
 
@@ -85,7 +87,7 @@ brew install tiann/tap/hapi
 <summary>npx (no install)</summary>
 
 ```bash
-npx @twsxtd/hapi
+npx @frankqing/hapi
 ```
 </details>
 
