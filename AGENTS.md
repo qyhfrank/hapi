@@ -144,3 +144,60 @@ bun run build:single-exe # All-in-one binary
 2. Unsure: read more code; if still stuck, ask w/ short options.
 3. Conflicts: call out; pick safer path.
 4. Unrecognized changes: assume other agent; keep going; focus your changes. If it causes issues, stop + ask user.
+
+## Fork maintenance
+
+This is a fork of `tiann/hapi`. Scope: `@frankqing/hapi` (upstream `@twsxtd`).
+Origin: `https://github.com/qyhfrank/hapi.git`
+
+### Upstream sync workflow
+
+```
+git fetch upstream
+git merge upstream/main --no-edit
+# resolve conflicts (typically bun.lock + cli/package.json)
+```
+
+Post-merge checklist:
+1. **Workspace deps**: `grep 'workspace:' */package.json` — `@hapi/protocol: workspace:*` in cli/package.json is critical; losing it breaks all builds
+2. **Scope replacement**: `grep -rn '@twsxtd' --include='*.{ts,json,yml,md,cjs}' | grep -v node_modules | grep -v bun.lock` → replace with `@frankqing`
+3. **Upstream usernames**: `grep -rn '@tiann' --include='*.{ts,json,yml,md,cjs}' | grep -v node_modules` → replace with `@qyhfrank`
+4. **cli/package.json**: keep `@frankqing` scope + update version + keep `@frankqing/hapi-*` in optionalDependencies
+5. **bun.lock**: accept theirs (`git checkout --theirs bun.lock`), then `bun install` to regenerate
+6. **AGENTS.md**: upstream may overwrite fork-specific sections — re-add `## Fork maintenance` after merge
+7. `bun typecheck && bun run test` before pushing
+
+### Release workflow
+
+```
+# 1. bump version in cli/package.json (version + all 5 optionalDependencies versions)
+# 2. commit + tag + push
+git add cli/package.json
+git commit -m "Release version X.Y.Z"
+git tag vX.Y.Z
+git push origin main vX.Y.Z
+```
+
+- Release CI triggers on `v*` tag push only
+- Single sequential job: build → publish 5 platform npm packages → publish main wrapper → GitHub Release
+- Platform packages must publish before wrapper (optionalDependencies resolution)
+- `npm view @pkg@version` idempotent check before each publish
+- Docker CI also triggers on `v*` tag; `is_default_branch` evaluates false on tag push (no branch context)
+
+### Local build & install
+
+```bash
+# prerequisites: bun, tunwg binaries
+bun run download:tunwg
+cd cli && bun run build:exe
+# binary at cli/dist-exe/bun-darwin-arm64/hapi
+
+# install to global npm
+eval "$(fnm env)"
+HAPI_BIN="$(npm root -g)/@frankqing/hapi/node_modules/@frankqing/hapi-darwin-arm64/bin/hapi"
+cp cli/dist-exe/bun-darwin-arm64/hapi "$HAPI_BIN"
+codesign -s - "$HAPI_BIN"  # bypass Gatekeeper
+hapi --version
+```
+
+Note: `npm install -g @frankqing/hapi` does NOT install optionalDependencies. Use local build or download binary from GitHub Release.
