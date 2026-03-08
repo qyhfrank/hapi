@@ -14,6 +14,10 @@ export type {
     Session,
     SessionSummary,
     SessionSummaryMetadata,
+    TeamMember,
+    TeamMessage,
+    TeamState,
+    TeamTask,
     TodoItem,
     WorktreeMetadata
 } from '@hapi/protocol/types'
@@ -151,7 +155,7 @@ export type GitStatusFiles = {
 export type SlashCommand = {
     name: string
     description?: string
-    source: 'builtin' | 'user' | 'plugin'
+    source: 'builtin' | 'user' | 'plugin' | 'project'
     content?: string  // Expanded content for Codex user prompts
     pluginName?: string
 }
