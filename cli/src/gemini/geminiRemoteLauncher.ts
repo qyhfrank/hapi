@@ -56,7 +56,8 @@ class GeminiRemoteLauncher extends RemoteLauncherBase {
             token: runtimeConfig.token,
             resumeSessionId: session.sessionId,
             hookSettingsPath: this.hookSettingsPath,
-            cwd: session.path
+            cwd: session.path,
+            permissionMode: session.getPermissionMode() as string | undefined
         });
         this.backend = backend;
 
@@ -198,6 +199,7 @@ class GeminiRemoteLauncher extends RemoteLauncherBase {
             await backend.cancelPrompt(this.session.sessionId);
         }
         await this.permissionHandler?.cancelAll('User aborted');
+        this.session.sendSessionEvent({ type: 'message', message: 'Session aborted' });
         this.session.queue.reset();
         this.session.onThinkingChange(false);
         this.abortController.abort();

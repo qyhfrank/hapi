@@ -12,7 +12,7 @@
     },
     "cli": {
       "name": "@frankqing/hapi",
-      "version": "0.16.1",
+      "version": "0.16.2",
       "bin": {
         "hapi": "bin/hapi.cjs",
       },
@@ -43,11 +43,11 @@
         "vitest": "^4.0.16",
       },
       "optionalDependencies": {
-        "@frankqing/hapi-darwin-arm64": "0.16.1",
-        "@frankqing/hapi-darwin-x64": "0.16.1",
-        "@frankqing/hapi-linux-arm64": "0.16.1",
-        "@frankqing/hapi-linux-x64": "0.16.1",
-        "@frankqing/hapi-win32-x64": "0.16.1",
+        "@frankqing/hapi-darwin-arm64": "0.16.2",
+        "@frankqing/hapi-darwin-x64": "0.16.2",
+        "@frankqing/hapi-linux-arm64": "0.16.2",
+        "@frankqing/hapi-linux-x64": "0.16.2",
+        "@frankqing/hapi-win32-x64": "0.16.2",
       },
     },
     "docs": {

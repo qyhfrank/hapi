@@ -1,11 +1,14 @@
 export type AgentType = 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode'
 export type SessionType = 'simple' | 'worktree'
+export type CodexReasoningEffort = 'default' | 'low' | 'medium' | 'high' | 'xhigh'
 
 export const MODEL_OPTIONS: Record<AgentType, { value: string; label: string }[]> = {
     claude: [
         { value: 'auto', label: 'Auto' },
         { value: 'opus', label: 'Opus' },
+        { value: 'opus[1m]', label: 'Opus 1M' },
         { value: 'sonnet', label: 'Sonnet' },
+        { value: 'sonnet[1m]', label: 'Sonnet 1M' },
     ],
     codex: [
         { value: 'auto', label: 'Auto' },
@@ -25,3 +28,11 @@ export const MODEL_OPTIONS: Record<AgentType, { value: string; label: string }[]
     ],
     opencode: [],
 }
+
+export const CODEX_REASONING_EFFORT_OPTIONS: { value: CodexReasoningEffort; label: string }[] = [
+    { value: 'default', label: 'Default' },
+    { value: 'low', label: 'Low' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'high', label: 'High' },
+    { value: 'xhigh', label: 'XHigh' },
+]

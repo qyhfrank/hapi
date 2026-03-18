@@ -46,7 +46,6 @@ export default {
   'session.item.path': '路径',
   'session.item.agent': '代理',
   'session.item.model': '模型',
-  'session.item.modelMode': '模型',
   'session.item.worktree': '工作树',
   'session.item.pending': '待处理',
   'session.item.thinking': '思考中',
@@ -107,6 +106,7 @@ export default {
   'newSession.agent': '代理',
   'newSession.model': '模型',
   'newSession.model.optional': '可选',
+  'newSession.reasoningEffort': '推理强度',
   'newSession.yolo': 'YOLO 模式',
   'newSession.yolo.title': '跳过审批和沙箱',
   'newSession.yolo.desc': '启动时使用危险的代理标志。',
@@ -267,6 +267,7 @@ export default {
   // Misc
   'misc.noMachines': '无可用机器',
   'misc.machine': '机器',
+  'misc.collaborationMode': '协作模式',
   'misc.permissionMode': '权限模式',
   'misc.model': '模型',
   'misc.loading': '加载中…',

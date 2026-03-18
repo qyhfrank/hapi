@@ -46,7 +46,6 @@ export default {
   'session.item.path': 'path',
   'session.item.agent': 'agent',
   'session.item.model': 'model',
-  'session.item.modelMode': 'mode',
   'session.item.worktree': 'worktree',
   'session.item.pending': 'pending',
   'session.item.thinking': 'thinking',
@@ -105,6 +104,7 @@ export default {
   'newSession.agent': 'Agent',
   'newSession.model': 'Model',
   'newSession.model.optional': 'optional',
+  'newSession.reasoningEffort': 'Reasoning effort',
   'newSession.yolo': 'YOLO mode',
   'newSession.yolo.title': 'Bypass approvals and sandbox',
   'newSession.yolo.desc': 'Uses dangerous agent flags when spawning.',
@@ -265,6 +265,7 @@ export default {
   // Misc
   'misc.noMachines': 'No machines available',
   'misc.machine': 'Machine',
+  'misc.collaborationMode': 'Collaboration Mode',
   'misc.permissionMode': 'Permission Mode',
   'misc.model': 'Model',
   'misc.loading': 'Loading…',

@@ -1,4 +1,4 @@
-import type { ModelMode, PermissionMode } from '@hapi/protocol/types'
+import type { CodexCollaborationMode, PermissionMode } from '@hapi/protocol/types'
 import type { Server } from 'socket.io'
 import type { RpcRegistry } from '../socket/rpcRegistry'
 
@@ -93,7 +93,8 @@ export class RpcGateway {
         sessionId: string,
         config: {
             permissionMode?: PermissionMode
-            modelMode?: ModelMode
+            model?: string | null
+            collaborationMode?: CodexCollaborationMode
         }
     ): Promise<unknown> {
         return await this.sessionRpc(sessionId, 'set-session-config', config)
@@ -108,6 +109,7 @@ export class RpcGateway {
         directory: string,
         agent: 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode' = 'claude',
         model?: string,
+        modelReasoningEffort?: string,
         yolo?: boolean,
         sessionType?: 'simple' | 'worktree',
         worktreeName?: string,
@@ -117,7 +119,7 @@ export class RpcGateway {
             const result = await this.machineRpc(
                 machineId,
                 'spawn-happy-session',
-                { type: 'spawn-in-directory', directory, agent, model, yolo, sessionType, worktreeName, resumeSessionId }
+                { type: 'spawn-in-directory', directory, agent, model, modelReasoningEffort, yolo, sessionType, worktreeName, resumeSessionId }
             )
             if (result && typeof result === 'object') {
                 const obj = result as Record<string, unknown>
@@ -127,8 +129,26 @@ export class RpcGateway {
                 if (obj.type === 'error' && typeof obj.errorMessage === 'string') {
                     return { type: 'error', message: obj.errorMessage }
                 }
+                if (obj.type === 'requestToApproveDirectoryCreation' && typeof obj.directory === 'string') {
+                    return { type: 'error', message: `Directory creation requires approval: ${obj.directory}` }
+                }
+                if (typeof obj.error === 'string') {
+                    return { type: 'error', message: obj.error }
+                }
+                if (obj.type !== 'success' && typeof obj.message === 'string') {
+                    return { type: 'error', message: obj.message }
+                }
             }
-            return { type: 'error', message: 'Unexpected spawn result' }
+            const details = typeof result === 'string'
+                ? result
+                : (() => {
+                    try {
+                        return JSON.stringify(result)
+                    } catch {
+                        return String(result)
+                    }
+                })()
+            return { type: 'error', message: `Unexpected spawn result: ${details}` }
         } catch (error) {
             return { type: 'error', message: error instanceof Error ? error.message : String(error) }
         }
