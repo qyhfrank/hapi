@@ -120,6 +120,10 @@ export default {
   'spawn.cancel': 'Cancel',
   'spawn.create': 'Create Session',
   'spawn.creating': 'Creating…',
+  'session.directoryMissingSimple': 'Directory does not exist. Creating the session will create it automatically.',
+  'session.directoryMissingSimpleConfirm': 'Directory does not exist. Click again to create it automatically.',
+  'session.directoryMissingWorktree': 'Worktree sessions require an existing repository directory.',
+  'session.createAndCreateDirectory': 'Create and make directory',
 
   // Machine
   'machine.unknown': 'Unknown platform',
@@ -254,6 +258,7 @@ export default {
   'settings.display.appearance.dark': 'Dark',
   'settings.display.appearance.light': 'Light',
   'settings.display.fontSize': 'Font Size',
+  'settings.display.terminalFontSize': 'Terminal Font Size',
   'settings.voice.title': 'Voice Assistant',
   'settings.voice.language': 'Voice Language',
   'settings.voice.autoDetect': 'Auto-detect',
