@@ -162,9 +162,9 @@ git merge upstream/main --no-edit
 
 Post-merge checklist:
 1. **Workspace deps**: `grep 'workspace:' */package.json` — `@hapi/protocol: workspace:*` in cli/package.json is critical; losing it breaks all builds
-2. **Scope replacement**: `grep -rn '@twsxtd' --include='*.{ts,json,yml,md,cjs}' | grep -v node_modules | grep -v bun.lock` → replace with `@frankqing`
-3. **Upstream usernames**: `grep -rn '@tiann' --include='*.{ts,json,yml,md,cjs}' | grep -v node_modules` → replace with `@qyhfrank`
-4. **cli/package.json**: keep `@frankqing` scope + update version + keep `@frankqing/hapi-*` in optionalDependencies
+2. **Source stays upstream**: do NOT replace `@twsxtd` with `@frankqing` in source files. Scope rebranding is handled at build-time by `release.yml` sed step
+3. **release.yml sed**: verify the sed commands in the "Rebrand packages for fork scope" step still cover all scope references if upstream changed file structure
+4. **README.md**: keep `@frankqing` scope in the Getting Started npx commands (this is the only source file with fork scope)
 5. **bun.lock**: accept theirs (`git checkout --theirs bun.lock`), then `bun install` to regenerate
 6. **AGENTS.md**: upstream may overwrite fork-specific sections — re-add `## Fork maintenance` after merge
 7. `bun typecheck && bun run test` before pushing
@@ -172,7 +172,7 @@ Post-merge checklist:
 ### Release workflow
 
 ```
-# 1. bump version in cli/package.json (version + all 5 optionalDependencies versions)
+# 1. bump version in cli/package.json (version only; optionalDeps versions are upstream's concern)
 # 2. commit + tag + push
 git add cli/package.json
 git commit -m "Release version X.Y.Z"
@@ -181,7 +181,7 @@ git push origin main vX.Y.Z
 ```
 
 - Release CI triggers on `v*` tag push only
-- Single sequential job: build → publish 5 platform npm packages → publish main wrapper → GitHub Release
+- Single sequential job: build → prepare npm packages → sed rebrand @twsxtd→@frankqing → publish 5 platform npm packages → publish main wrapper → GitHub Release
 - Platform packages must publish before wrapper (optionalDependencies resolution)
 - `npm view @pkg@version` idempotent check before each publish
 - Docker CI also triggers on `v*` tag; `is_default_branch` evaluates false on tag push (no branch context)
