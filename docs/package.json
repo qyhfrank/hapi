@@ -1,7 +1,6 @@
 {
   "name": "hapi-docs",
   "version": "1.0.0",
-  "private": true,
   "description": "HAPI Documentation",
   "type": "module",
   "scripts": {
