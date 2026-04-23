@@ -12,7 +12,7 @@ type HookCommandConfig = {
     }>;
 };
 
-export type HookSettings = {
+type HookSettings = {
     hooksConfig?: {
         enabled?: boolean;
     };
@@ -43,7 +43,7 @@ function shellJoin(parts: string[]): string {
     return parts.map(shellQuote).join(' ');
 }
 
-export function buildSessionStartHookSettings(command: string, hooksEnabled?: boolean): HookSettings {
+function buildHookSettings(command: string, hooksEnabled?: boolean): HookSettings {
     const hooks: HookSettings['hooks'] = {
         SessionStart: [
             {
@@ -68,18 +68,6 @@ export function buildSessionStartHookSettings(command: string, hooksEnabled?: bo
     return settings;
 }
 
-export function buildHookForwarderCommand(port: number, token: string): string {
-    const { command, args } = getHappyCliCommand([
-        'hook-forwarder',
-        '--port',
-        String(port),
-        '--token',
-        token
-    ]);
-
-    return shellJoin([command, ...args]);
-}
-
 export function generateHookSettingsFile(
     port: number,
     token: string,
@@ -91,8 +79,16 @@ export function generateHookSettingsFile(
     const filename = `${options.filenamePrefix}-${process.pid}.json`;
     const filepath = join(hooksDir, filename);
 
-    const hookCommand = buildHookForwarderCommand(port, token);
-    const settings = buildSessionStartHookSettings(hookCommand, options.hooksEnabled);
+    const { command, args } = getHappyCliCommand([
+        'hook-forwarder',
+        '--port',
+        String(port),
+        '--token',
+        token
+    ]);
+    const hookCommand = shellJoin([command, ...args]);
+
+    const settings = buildHookSettings(hookCommand, options.hooksEnabled);
 
     writeFileSync(filepath, JSON.stringify(settings, null, 4));
     logger.debug(`[${options.logLabel}] Created hook settings file: ${filepath}`);
