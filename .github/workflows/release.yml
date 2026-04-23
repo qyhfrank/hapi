@@ -30,6 +30,12 @@ jobs:
       - name: Prepare npm packages
         run: cd cli && bun run prepare-npm-packages
 
+      - name: Rebrand packages for fork scope
+        run: |
+          find cli/npm -name 'package.json' -exec sed -i 's/@twsxtd/@frankqing/g' {} +
+          sed -i 's/@twsxtd/@frankqing/g' cli/npm/main/bin/hapi.cjs
+          sed -i 's|github.com/tiann/hapi|github.com/qyhfrank/hapi|g' cli/npm/main/bin/hapi.cjs
+
       - name: Publish platform packages to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
