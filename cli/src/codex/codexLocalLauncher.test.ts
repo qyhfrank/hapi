@@ -229,8 +229,12 @@ describe('codexLocalLauncher', () => {
         ]);
     });
 
-    it('warns on session match failure without aborting local Codex launch', async () => {
+    it('does not emit a session warning while waiting for the first transcript path', async () => {
         const { session, sessionEvents, getLocalLaunchFailure } = createSessionStub('default', undefined, 'c:\\workspace\\project');
+        let releaseRunBarrier: (() => void) | undefined;
+        harness.runBarrier = new Promise((resolve) => {
+            releaseRunBarrier = resolve;
+        });
 
         vi.useFakeTimers();
         const launcherPromise = codexLocalLauncher(session as never);
@@ -239,19 +243,25 @@ describe('codexLocalLauncher', () => {
         await Promise.resolve();
         vi.advanceTimersByTime(10_000);
         await Promise.resolve();
+        expect(sessionEvents).toEqual([]);
+
+        if (releaseRunBarrier) {
+            releaseRunBarrier();
+        }
         await launcherPromise;
 
         expect(harness.launches.length).toBeGreaterThan(0);
         expect(getLocalLaunchFailure()).toBeNull();
-        expect(sessionEvents).toContainEqual({
-            type: 'message',
-            message: 'No Codex SessionStart hook transcript path received within 10000ms. Keeping local Codex running; remote transcript sync may be unavailable for this launch.'
-        });
+        expect(sessionEvents).toEqual([]);
     });
 
     it('does not reuse a stale transcript path from a previous launch', async () => {
         const staleTranscriptPath = join(tempDir, 'stale-transcript.jsonl');
         const { session, sessionEvents } = createSessionStub('default', undefined, '/tmp/worktree', staleTranscriptPath);
+        let releaseRunBarrier: (() => void) | undefined;
+        harness.runBarrier = new Promise((resolve) => {
+            releaseRunBarrier = resolve;
+        });
 
         vi.useFakeTimers();
         const launcherPromise = codexLocalLauncher(session as never);
@@ -261,12 +271,14 @@ describe('codexLocalLauncher', () => {
 
         vi.advanceTimersByTime(10_000);
         await Promise.resolve();
+        expect(sessionEvents).toEqual([]);
+
+        if (releaseRunBarrier) {
+            releaseRunBarrier();
+        }
         await launcherPromise;
 
-        expect(sessionEvents).toContainEqual({
-            type: 'message',
-            message: 'No Codex SessionStart hook transcript path received within 10000ms. Keeping local Codex running; remote transcript sync may be unavailable for this launch.'
-        });
+        expect(sessionEvents).toEqual([]);
     });
 
     it('passes SessionStart hook config into local Codex launch', async () => {

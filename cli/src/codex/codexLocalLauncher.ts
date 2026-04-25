@@ -10,8 +10,6 @@ import { stripCodexCliOverrides } from './utils/codexCliOverrides';
 import { buildCodexPermissionModeCliArgs } from './utils/permissionModeConfig';
 import { BaseLocalLauncher } from '@/modules/common/launcher/BaseLocalLauncher';
 
-const SESSION_HOOK_TIMEOUT_MS = 10_000;
-
 export async function codexLocalLauncher(session: CodexSession): Promise<'switch' | 'exit'> {
     const resumeSessionId = session.sessionId;
     let scanner: CodexSessionScanner | null = null;
@@ -47,23 +45,6 @@ export async function codexLocalLauncher(session: CodexSession): Promise<'switch
     });
     logger.debug(`[codex-local]: Started Codex SessionStart hook server on port ${hookServer.port}`);
 
-    let hookTimeout: ReturnType<typeof setTimeout> | null = setTimeout(() => {
-        hookTimeout = null;
-        const message = `No Codex SessionStart hook transcript path received within ${SESSION_HOOK_TIMEOUT_MS}ms.`;
-        logger.warn(`[codex-local]: ${message}`);
-        session.sendSessionEvent({
-            type: 'message',
-            message: `${message} Keeping local Codex running; remote transcript sync may be unavailable for this launch.`
-        });
-    }, SESSION_HOOK_TIMEOUT_MS);
-
-    const clearHookTimeout = () => {
-        if (hookTimeout) {
-            clearTimeout(hookTimeout);
-            hookTimeout = null;
-        }
-    };
-
     const reportTranscriptSyncFailure = (transcriptPath: string, error: unknown): void => {
         const detail = error instanceof Error ? error.message : String(error);
         const message = `Codex transcript sync failed for ${transcriptPath}: ${detail}`;
@@ -80,7 +61,6 @@ export async function codexLocalLauncher(session: CodexSession): Promise<'switch
 
     const processTranscriptPath = async (transcriptPath: string): Promise<void> => {
         hookReady = true;
-        clearHookTimeout();
         if (shuttingDown) {
             return;
         }
@@ -170,7 +150,6 @@ export async function codexLocalLauncher(session: CodexSession): Promise<'switch
         return await launcher.run();
     } finally {
         shuttingDown = true;
-        clearHookTimeout();
         session.removeTranscriptPathCallback(handleTranscriptPathCallback);
         hookServer.stop();
         if (pendingScannerSetup) {
