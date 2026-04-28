@@ -63,7 +63,12 @@ export class SyncEngine {
         this.eventPublisher = new EventPublisher(sseManager, (event) => this.resolveNamespace(event))
         this.sessionCache = new SessionCache(store, this.eventPublisher)
         this.machineCache = new MachineCache(store, this.eventPublisher)
-        this.messageService = new MessageService(store, io, this.eventPublisher)
+        this.messageService = new MessageService(
+            store,
+            io,
+            this.eventPublisher,
+            (sessionId, updatedAt) => this.recordSessionActivity(sessionId, updatedAt)
+        )
         this.rpcGateway = new RpcGateway(io, rpcRegistry)
         this.reloadAll()
         this.inactivityTimer = setInterval(() => this.expireInactive(), 5_000)
@@ -209,8 +214,13 @@ export class SyncEngine {
         this.triggerDedupIfNeeded(payload.sid)
     }
 
-    handleSessionEnd(payload: { sid: string; time: number }): void {
+    handleSessionEnd(payload: { sid: string; time: number; reason?: 'completed' | 'terminated' | 'error' }): void {
         this.sessionCache.handleSessionEnd(payload)
+        this.eventPublisher.emit({
+            type: 'session-ended',
+            sessionId: payload.sid,
+            reason: payload.reason
+        })
         // Retry dedup now that this session is inactive — a prior dedup may have
         // skipped it because it was still active at the time.
         this.triggerDedupIfNeeded(payload.sid)
@@ -218,6 +228,10 @@ export class SyncEngine {
 
     handleBackgroundTaskDelta(sessionId: string, delta: { started: number; completed: number }): void {
         this.sessionCache.applyBackgroundTaskDelta(sessionId, delta)
+    }
+
+    recordSessionActivity(sessionId: string, updatedAt: number): void {
+        this.sessionCache.recordSessionActivity(sessionId, updatedAt)
     }
 
     handleMachineAlive(payload: { machineId: string; time: number }): void {
@@ -276,6 +290,7 @@ export class SyncEngine {
         }
     ): Promise<void> {
         await this.messageService.sendMessage(sessionId, payload)
+        this.sessionCache.markMessageQueued(sessionId)
     }
 
     async approvePermission(
@@ -328,6 +343,15 @@ export class SyncEngine {
             collaborationMode?: CodexCollaborationMode
         }
     ): Promise<void> {
+        const session = this.sessionCache.getSession(sessionId)
+        if (!session?.active) {
+            // For inactive sessions, update the in-memory cache directly without
+            // an RPC call — the CLI is not running yet. The updated value will be
+            // passed to the spawned process when the session is resumed.
+            this.sessionCache.applySessionConfig(sessionId, config)
+            return
+        }
+
         const result = await this.rpcGateway.requestSessionConfig(sessionId, config)
         if (!result || typeof result !== 'object') {
             throw new Error('Invalid response from session config RPC')
@@ -377,7 +401,7 @@ export class SyncEngine {
         )
     }
 
-    async resumeSession(sessionId: string, namespace: string): Promise<ResumeSessionResult> {
+    async resumeSession(sessionId: string, namespace: string, opts?: { permissionMode?: PermissionMode }): Promise<ResumeSessionResult> {
         const access = this.sessionCache.resolveSessionAccess(sessionId, namespace)
         if (!access.ok) {
             return {
@@ -435,6 +459,7 @@ export class SyncEngine {
             return { type: 'error', message: 'No machine online', code: 'no_machine_online' }
         }
 
+        const effectivePermissionMode = opts?.permissionMode ?? session.permissionMode ?? undefined
         const spawnResult = await this.rpcGateway.spawnSession(
             targetMachine.id,
             metadata.path,
@@ -446,7 +471,7 @@ export class SyncEngine {
             undefined,
             resumeToken,
             session.effort ?? undefined,
-            session.permissionMode ?? undefined
+            effectivePermissionMode
         )
 
         if (spawnResult.type !== 'success') {
@@ -510,6 +535,10 @@ export class SyncEngine {
 
     async checkPathsExist(machineId: string, paths: string[]): Promise<Record<string, boolean>> {
         return await this.rpcGateway.checkPathsExist(machineId, paths)
+    }
+
+    async listMachineDirectory(machineId: string, path: string): Promise<RpcListDirectoryResponse> {
+        return await this.rpcGateway.listMachineDirectory(machineId, path)
     }
 
     async getGitStatus(sessionId: string, cwd?: string): Promise<RpcCommandResponse> {
