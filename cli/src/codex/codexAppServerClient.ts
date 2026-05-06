@@ -13,7 +13,9 @@ import type {
     TurnStartParams,
     TurnStartResponse,
     TurnInterruptParams,
-    TurnInterruptResponse
+    TurnInterruptResponse,
+    ThreadCompactStartParams,
+    ThreadCompactStartResponse
 } from './appServerTypes';
 
 type JsonRpcLiteRequest = {
@@ -82,7 +84,8 @@ export class CodexAppServerClient {
                 return acc;
             }, {} as Record<string, string>),
             stdio: ['pipe', 'pipe', 'pipe'],
-            shell: process.platform === 'win32'
+            shell: process.platform === 'win32',
+            windowsHide: process.platform === 'win32'
         });
 
         this.process.stdout.setEncoding('utf8');
@@ -171,6 +174,17 @@ export class CodexAppServerClient {
             timeoutMs: 30_000
         });
         return response as TurnInterruptResponse;
+    }
+
+    async compactThread(
+        params: ThreadCompactStartParams,
+        options?: { signal?: AbortSignal }
+    ): Promise<ThreadCompactStartResponse> {
+        const response = await this.sendRequest('thread/compact/start', params, {
+            signal: options?.signal,
+            timeoutMs: CodexAppServerClient.DEFAULT_TIMEOUT_MS
+        });
+        return response as ThreadCompactStartResponse;
     }
 
     async disconnect(): Promise<void> {
