@@ -991,6 +991,97 @@ describe('session model', () => {
         }
     })
 
+    it('includes first user message in local resumable sessions', () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(
+            store,
+            {} as never,
+            new RpcRegistry(),
+            { broadcast() {} } as never
+        )
+
+        try {
+            const session = engine.getOrCreateSession(
+                'local-resume-first-message',
+                {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    flavor: 'codex',
+                    codexSessionId: 'codex-thread-1',
+                    name: 'Generated title'
+                },
+                null,
+                'default'
+            )
+            store.messages.addMessage(session.id, {
+                role: 'agent',
+                content: { type: 'text', text: 'agent warmup' }
+            })
+            store.messages.addMessage(session.id, {
+                role: 'user',
+                content: { type: 'text', text: '  Build the picker\nwith search  ' }
+            })
+
+            const sessions = engine.listLocalResumableSessions('default', { machineId: 'machine-1' })
+
+            expect(sessions.find((item) => item.sessionId === session.id)).toMatchObject({
+                name: 'Generated title',
+                firstUserMessage: 'Build the picker with search'
+            })
+        } finally {
+            engine.stop()
+        }
+    })
+
+    it('recovers first user message from stored Claude user output events', () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(
+            store,
+            {} as never,
+            new RpcRegistry(),
+            { broadcast() {} } as never
+        )
+
+        try {
+            const session = engine.getOrCreateSession(
+                'local-resume-first-claude-output',
+                {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    flavor: 'claude',
+                    claudeSessionId: '11111111-1111-4111-8111-111111111111',
+                    name: 'Generated title'
+                },
+                null,
+                'default'
+            )
+            store.messages.addMessage(session.id, {
+                role: 'agent',
+                content: {
+                    type: 'output',
+                    data: {
+                        type: 'user',
+                        message: {
+                            role: 'user',
+                            content: [{ type: 'text', text: 'First Claude prompt' }]
+                        }
+                    }
+                }
+            })
+
+            const sessions = engine.listLocalResumableSessions('default', { machineId: 'machine-1' })
+
+            expect(sessions.find((item) => item.sessionId === session.id)).toMatchObject({
+                name: 'Generated title',
+                firstUserMessage: 'First Claude prompt'
+            })
+        } finally {
+            engine.stop()
+        }
+    })
+
     it('local handoff succeeds immediately for inactive sessions', async () => {
         const store = new Store(':memory:')
         const engine = new SyncEngine(
