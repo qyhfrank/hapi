@@ -1,4 +1,5 @@
 export * from './messages'
+export * from './buildInfo'
 export * from './flavors'
 export * from './models'
 export * from './modes'
