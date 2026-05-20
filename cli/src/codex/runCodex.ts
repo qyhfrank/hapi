@@ -7,7 +7,8 @@ import { registerKillSessionHandler } from '@/claude/registerKillSessionHandler'
 import type { AgentState } from '@/api/types';
 import type { CodexSession } from './session';
 import { parseCodexCliOverrides } from './utils/codexCliOverrides';
-import { bootstrapSession } from '@/agent/sessionFactory';
+import { bootstrapExistingSession, bootstrapSession } from '@/agent/sessionFactory';
+import { registerLocalHandoffHandler } from '@/agent/localHandoff';
 import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } from '@/agent/runnerLifecycle';
 import { isPermissionModeAllowedForFlavor } from '@hapi/protocol';
 import { CodexCollaborationModeSchema, PermissionModeSchema } from '@hapi/protocol/schemas';
@@ -29,8 +30,11 @@ export async function runCodex(opts: {
     resumeSessionId?: string;
     model?: string;
     modelReasoningEffort?: ReasoningEffort;
+    collaborationMode?: EnhancedMode['collaborationMode'];
+    existingSessionId?: string;
+    workingDirectory?: string;
 }): Promise<void> {
-    const workingDirectory = getInvokedCwd();
+    const workingDirectory = opts.workingDirectory ?? getInvokedCwd();
     const startedBy = opts.startedBy ?? 'terminal';
 
     logger.debug(`[codex] Starting with options: startedBy=${startedBy}`);
@@ -38,14 +42,22 @@ export async function runCodex(opts: {
     let state: AgentState = {
         controlledByUser: false
     };
-    const { api, session } = await bootstrapSession({
-        flavor: 'codex',
-        startedBy,
-        workingDirectory,
-        agentState: state,
-        model: opts.model,
-        modelReasoningEffort: opts.modelReasoningEffort
-    });
+    const bootstrap = opts.existingSessionId
+        ? await bootstrapExistingSession({
+            sessionId: opts.existingSessionId,
+            flavor: 'codex',
+            startedBy,
+            workingDirectory
+        })
+        : await bootstrapSession({
+            flavor: 'codex',
+            startedBy,
+            workingDirectory,
+            agentState: state,
+            model: opts.model,
+            modelReasoningEffort: opts.modelReasoningEffort
+        });
+    const { api, session } = bootstrap;
 
     const startingMode: 'local' | 'remote' = startedBy === 'runner' ? 'remote' : 'local';
 
@@ -64,7 +76,7 @@ export async function runCodex(opts: {
     let currentPermissionMode: PermissionMode = opts.permissionMode ?? 'default';
     let currentModel = opts.model;
     let currentModelReasoningEffort: ReasoningEffort | undefined = opts.modelReasoningEffort;
-    let currentCollaborationMode: EnhancedMode['collaborationMode'] = 'default';
+    let currentCollaborationMode: EnhancedMode['collaborationMode'] = opts.collaborationMode ?? 'default';
 
     const lifecycle = createRunnerLifecycle({
         session,
@@ -74,6 +86,7 @@ export async function runCodex(opts: {
 
     lifecycle.registerProcessHandlers();
     registerKillSessionHandler(session.rpcHandlerManager, lifecycle.cleanupAndExit);
+    registerLocalHandoffHandler(session.rpcHandlerManager, lifecycle);
 
     const applyCurrentConfigToSession = (options?: { syncModel?: boolean }) => {
         const sessionInstance = sessionWrapperRef.current;
@@ -149,6 +162,27 @@ export async function runCodex(opts: {
                     model: currentModel,
                     modelReasoningEffort: currentModelReasoningEffort
                 });
+                if (slash.kind === 'goal') {
+                    if (slash.message) {
+                        session.sendAgentMessage({
+                            type: 'message',
+                            message: slash.message,
+                            id: randomUUID()
+                        });
+                    }
+                    const goalCommand = slash.action === 'set'
+                        ? `/goal ${slash.objective ?? ''}`
+                        : slash.action === 'show'
+                            ? '/goal'
+                            : `/goal ${slash.action}`;
+                    messageQueue.pushIsolateAndClear(goalCommand, {
+                        permissionMode: currentPermissionMode ?? 'default',
+                        model: currentModel,
+                        modelReasoningEffort: currentModelReasoningEffort,
+                        collaborationMode: currentCollaborationMode
+                    }, localId);
+                    return;
+                }
                 if (slash.kind !== 'passthrough') {
                     applySlashUpdates(slash.updates);
                     if (slash.message) {

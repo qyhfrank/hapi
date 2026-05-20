@@ -130,6 +130,7 @@ describe('appServerConfig', () => {
             mode: 'default',
             settings: {
                 model: 'o3',
+                reasoning_effort: 'high',
                 developer_instructions: withCollaborationInstructions(codexSystemPrompt)
             }
         });
@@ -155,6 +156,7 @@ describe('appServerConfig', () => {
             mode: 'default',
             settings: {
                 model: 'gpt-5.3-codex-spark',
+                reasoning_effort: 'high',
                 developer_instructions: withCollaborationInstructions(codexSystemPrompt)
             }
         });
@@ -236,6 +238,7 @@ describe('appServerConfig', () => {
             mode: 'plan',
             settings: {
                 model: 'o3',
+                reasoning_effort: 'high',
                 developer_instructions: withCollaborationInstructions(codexSystemPrompt)
             }
         });
@@ -255,6 +258,7 @@ describe('appServerConfig', () => {
             mode: 'plan',
             settings: {
                 model: 'o3',
+                reasoning_effort: null,
                 developer_instructions: withCollaborationInstructions(`${codexSystemPrompt}\n\nOnly respond in Chinese.`)
             }
         });
@@ -269,9 +273,9 @@ describe('appServerConfig', () => {
         });
 
         const instructions = params.collaborationMode?.settings.developer_instructions;
-        expect(instructions).toContain('If you call spawn_agent with fork_context: true');
+        expect(instructions).toContain('Treat omitted fork_context the same as fork_context: true');
         expect(instructions).toContain('do not set agent_type, model, or reasoning_effort');
-        expect(instructions).toContain('omit fork_context or set fork_context: false');
+        expect(instructions).toContain('set fork_context: false');
         expect(instructions).toContain('Do not rely on parent turn reasoning settings for spawned agents');
     });
 
@@ -299,6 +303,7 @@ describe('appServerConfig', () => {
             mode: 'default',
             settings: {
                 model: 'o3',
+                reasoning_effort: null,
                 developer_instructions: withCollaborationInstructions(codexSystemPrompt)
             }
         });
@@ -319,6 +324,7 @@ describe('appServerConfig', () => {
             mode: 'default',
             settings: {
                 model: 'o3',
+                reasoning_effort: null,
                 developer_instructions: withCollaborationInstructions(codexSystemPrompt)
             }
         });
@@ -338,9 +344,23 @@ describe('appServerConfig', () => {
             mode: 'default',
             settings: {
                 model: 'gpt-5',
+                reasoning_effort: null,
                 developer_instructions: withCollaborationInstructions(codexSystemPrompt)
             }
         });
         expect(params.model).toBeUndefined();
+    });
+
+    it('can suppress collaboration mode while preserving top-level model', () => {
+        const params = buildTurnStartParams({
+            threadId: 'thread-1',
+            message: 'hello',
+            cwd: '/workspace/project',
+            mode: { permissionMode: 'default', model: 'o3', collaborationMode: 'plan' },
+            overrides: { suppressCollaborationMode: true }
+        });
+
+        expect(params.collaborationMode).toBeUndefined();
+        expect(params.model).toBe('o3');
     });
 });

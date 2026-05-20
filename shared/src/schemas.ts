@@ -3,10 +3,16 @@ import { CODEX_COLLABORATION_MODES, PERMISSION_MODES } from './modes'
 
 export const PermissionModeSchema = z.enum(PERMISSION_MODES)
 export const CodexCollaborationModeSchema = z.enum(CODEX_COLLABORATION_MODES)
+export const SessionEndReasonSchema = z.enum(['completed', 'terminated', 'error', 'handoff'])
+export type SessionEndReason = z.infer<typeof SessionEndReasonSchema>
 
 const MetadataSummarySchema = z.object({
     text: z.string(),
     updatedAt: z.number()
+})
+
+const SessionCapabilitiesSchema = z.object({
+    terminal: z.boolean().optional()
 })
 
 export const WorktreeMetadataSchema = z.object({
@@ -46,6 +52,7 @@ export const MetadataSchema = z.object({
     archivedBy: z.string().optional(),
     archiveReason: z.string().optional(),
     flavor: z.string().nullish(),
+    capabilities: SessionCapabilitiesSchema.optional(),
     worktree: WorktreeMetadataSchema.optional()
 })
 
@@ -138,6 +145,22 @@ export const TeamStateSchema = z.object({
 
 export type TeamState = z.infer<typeof TeamStateSchema>
 
+export const ThreadGoalStatusSchema = z.enum(['active', 'paused', 'budgetLimited', 'complete'])
+export type ThreadGoalStatus = z.infer<typeof ThreadGoalStatusSchema>
+
+export const ThreadGoalSchema = z.object({
+    threadId: z.string(),
+    objective: z.string(),
+    status: ThreadGoalStatusSchema,
+    tokenBudget: z.number().nullable().optional(),
+    tokensUsed: z.number().optional().default(0),
+    timeUsedSeconds: z.number().optional().default(0),
+    createdAt: z.number().optional().default(0),
+    updatedAt: z.number().optional().default(0)
+})
+
+export type ThreadGoal = z.infer<typeof ThreadGoalSchema>
+
 export const AttachmentMetadataSchema = z.object({
     id: z.string(),
     filename: z.string(),
@@ -155,7 +178,8 @@ export const DecryptedMessageSchema = z.object({
     localId: z.string().nullable(),
     content: z.unknown(),
     createdAt: z.number(),
-    invokedAt: z.number().nullable().optional()
+    invokedAt: z.number().nullable().optional(),
+    scheduledAt: z.number().nullable().optional()
 })
 
 export type DecryptedMessage = z.infer<typeof DecryptedMessageSchema>
@@ -220,7 +244,7 @@ export const SyncEventSchema = z.discriminatedUnion('type', [
     }),
     SessionChangedSchema.extend({
         type: z.literal('session-ended'),
-        reason: z.enum(['completed', 'terminated', 'error']).optional()
+        reason: SessionEndReasonSchema.optional()
     }),
     MachineChangedSchema.extend({
         type: z.literal('machine-updated'),

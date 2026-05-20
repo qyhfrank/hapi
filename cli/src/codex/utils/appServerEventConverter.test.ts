@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { logger } from '@/ui/logger';
 import { AppServerEventConverter } from './appServerEventConverter';
 
 describe('AppServerEventConverter', () => {
@@ -14,6 +15,33 @@ describe('AppServerEventConverter', () => {
         const events = converter.handleNotification('thread/resumed', { thread: { id: 'thread-2' } });
 
         expect(events).toEqual([{ type: 'thread_started', thread_id: 'thread-2' }]);
+    });
+
+    it('maps thread goal updates and clears', () => {
+        const converter = new AppServerEventConverter();
+        const goal = {
+            threadId: 'thread-1',
+            objective: 'ship goal support',
+            status: 'active'
+        };
+
+        expect(converter.handleNotification('thread/goal/updated', {
+            threadId: 'thread-1',
+            turnId: 'turn-1',
+            goal
+        })).toEqual([{
+            type: 'thread_goal_updated',
+            thread_id: 'thread-1',
+            turn_id: 'turn-1',
+            goal
+        }]);
+
+        expect(converter.handleNotification('thread/goal/cleared', {
+            threadId: 'thread-1'
+        })).toEqual([{
+            type: 'thread_goal_cleared',
+            thread_id: 'thread-1'
+        }]);
     });
 
     it('maps thread systemError to a task failure', () => {
@@ -279,7 +307,10 @@ describe('AppServerEventConverter', () => {
                 status: 'completed',
                 receiverThreadIds: ['agent-1'],
                 agentsStates: {
-                    'agent-1': { status: 'completed', message: '42' }
+                    'agent-1': { status: 'completed', message: '42' },
+                    'agent-2': { status: 'done', message: null },
+                    'agent-3': { status: 'done', result: { text: 'structured result' } },
+                    'agent-4': { status: 'completed', message: '', output: { value: 42 } }
                 }
             }
         });
@@ -289,7 +320,10 @@ describe('AppServerEventConverter', () => {
             name: 'wait_agent',
             output: {
                 status: {
-                    'agent-1': { completed: '42' }
+                    'agent-1': { completed: '42' },
+                    'agent-2': { status: 'completed', message: null },
+                    'agent-3': { status: 'completed', result: { text: 'structured result' } },
+                    'agent-4': { status: 'completed', message: '', output: { value: 42 } }
                 },
                 timed_out: false
             },
@@ -709,4 +743,51 @@ describe('AppServerEventConverter', () => {
         ]);
     });
 
+    it('converts completed image generation items without including large result payloads', () => {
+        const converter = new AppServerEventConverter();
+        const largeImageResult = 'a'.repeat(4096);
+
+        const events = converter.handleNotification('item/completed', {
+            item: {
+                id: 'image-1',
+                type: 'imageGeneration',
+                result: largeImageResult,
+                savedPath: '/tmp/image.png',
+                mimeType: 'image/png'
+            }
+        });
+
+        expect(events).toEqual([{
+            type: 'generated_image',
+            image_id: 'image-1',
+            saved_path: '/tmp/image.png',
+            file_name: 'image.png',
+            mime_type: 'image/png'
+        }]);
+        expect(JSON.stringify(events)).not.toContain(largeImageResult);
+    });
+
+    it('truncates large unhandled notification payloads before logging', () => {
+        const converter = new AppServerEventConverter();
+        const debug = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+        const largeResult = 'a'.repeat(4096);
+
+        const events = converter.handleNotification('item/completed', {
+            item: {
+                id: 'unknown-1',
+                type: 'unknownLargePayload',
+                result: largeResult,
+                savedPath: '/tmp/image.png'
+            }
+        });
+
+        expect(events).toEqual([]);
+        expect(debug).toHaveBeenCalledTimes(1);
+        const logged = debug.mock.calls[0]?.[1] as { params?: { item?: { result?: string; savedPath?: string } } };
+        expect(logged.params?.item?.result).not.toBe(largeResult);
+        expect(logged.params?.item?.result).toContain('[truncated 3584 chars for logs]');
+        expect(logged.params?.item?.savedPath).toBe('/tmp/image.png');
+
+        debug.mockRestore();
+    });
 });
