@@ -16,6 +16,7 @@ import { bootstrapExistingSession, bootstrapSession } from '@/agent/sessionFacto
 import { registerLocalHandoffHandler } from '@/agent/localHandoff';
 import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } from '@/agent/runnerLifecycle';
 import { isPermissionModeAllowedForFlavor } from '@hapi/protocol';
+import { RPC_METHODS } from '@hapi/protocol/rpcMethods';
 import { PermissionModeSchema } from '@hapi/protocol/schemas';
 import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
 import { normalizeClaudeSessionModel } from './model';
@@ -383,7 +384,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         return normalizeClaudeSessionEffort(value);
     };
 
-    session.rpcHandlerManager.registerHandler('set-session-config', async (payload: unknown) => {
+    session.rpcHandlerManager.registerHandler(RPC_METHODS.SetSessionConfig, async (payload: unknown) => {
         if (!payload || typeof payload !== 'object') {
             throw new Error('Invalid session config payload');
         }

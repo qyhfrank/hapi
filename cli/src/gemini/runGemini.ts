@@ -12,8 +12,7 @@ import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } f
 import { startHookServer } from '@/claude/utils/startHookServer';
 import { cleanupHookSettingsFile, generateHookSettingsFile } from '@/modules/common/hooks/generateHookSettings';
 import { resolveGeminiRuntimeConfig } from './utils/config';
-import { isPermissionModeAllowedForFlavor } from '@hapi/protocol';
-import { PermissionModeSchema } from '@hapi/protocol/schemas';
+import { registerSessionConfigRpc } from '@/agent/sessionConfigRpc';
 import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
 import { getInvokedCwd } from '@/utils/invokedCwd';
 
@@ -146,44 +145,20 @@ export async function runGemini(opts: {
         return removed;
     });
 
-    const resolvePermissionMode = (value: unknown): PermissionMode => {
-        const parsed = PermissionModeSchema.safeParse(value);
-        if (!parsed.success || !isPermissionModeAllowedForFlavor(parsed.data, 'gemini')) {
-            throw new Error('Invalid permission mode');
-        }
-        return parsed.data as PermissionMode;
-    };
-
-    const resolveModel = (value: unknown): string | null => {
-        if (value === null) {
-            return null;
-        }
-        if (typeof value !== 'string' || value.trim().length === 0) {
-            throw new Error('Invalid model');
-        }
-        return value.trim();
-    };
-
-    session.rpcHandlerManager.registerHandler('set-session-config', async (payload: unknown) => {
-        if (!payload || typeof payload !== 'object') {
-            throw new Error('Invalid session config payload');
-        }
-        const config = payload as { permissionMode?: unknown; model?: unknown };
-        const applied: Record<string, unknown> = {};
-
-        if (config.permissionMode !== undefined) {
-            currentPermissionMode = resolvePermissionMode(config.permissionMode);
-            applied.permissionMode = currentPermissionMode;
-        }
-
-        if (config.model !== undefined) {
-            sessionModel = resolveModel(config.model);
-            resolvedModel = sessionModel ?? machineDefault;
-            applied.model = sessionModel;
-        }
-
-        syncSessionMode();
-        return { applied };
+    registerSessionConfigRpc<PermissionMode>({
+        rpcHandlerManager: session.rpcHandlerManager,
+        flavor: 'gemini',
+        modelMode: 'nullable',
+        onApply: (config) => {
+            if (config.permissionMode !== undefined) {
+                currentPermissionMode = config.permissionMode;
+            }
+            if (config.model !== undefined) {
+                sessionModel = config.model;
+                resolvedModel = sessionModel ?? machineDefault;
+            }
+        },
+        onAfterApply: syncSessionMode
     });
 
     let crashed = false;

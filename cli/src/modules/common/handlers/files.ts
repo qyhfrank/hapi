@@ -2,6 +2,8 @@ import { logger } from '@/ui/logger'
 import { readFile, stat, writeFile } from 'fs/promises'
 import { createHash } from 'crypto'
 import { resolve } from 'path'
+import type { FileReadResponse, GeneratedImageResponse } from '@hapi/protocol/apiTypes'
+import { RPC_METHODS } from '@hapi/protocol/rpcMethods'
 import type { RpcHandlerManager } from '@/api/rpc/RpcHandlerManager'
 import { validatePath } from '../pathSecurity'
 import { getGeneratedImage } from '../generatedImages'
@@ -11,23 +13,13 @@ interface ReadFileRequest {
     path: string
 }
 
-interface ReadFileResponse {
-    success: boolean
-    content?: string
-    error?: string
-}
+type ReadFileResponse = FileReadResponse
 
 interface ReadGeneratedImageRequest {
     id: string
 }
 
-interface ReadGeneratedImageResponse {
-    success: boolean
-    content?: string
-    mimeType?: string
-    fileName?: string
-    error?: string
-}
+type ReadGeneratedImageResponse = GeneratedImageResponse
 
 interface WriteFileRequest {
     path: string
@@ -42,7 +34,7 @@ interface WriteFileResponse {
 }
 
 export function registerFileHandlers(rpcHandlerManager: RpcHandlerManager, workingDirectory: string): void {
-    rpcHandlerManager.registerHandler<ReadFileRequest, ReadFileResponse>('readFile', async (data) => {
+    rpcHandlerManager.registerHandler<ReadFileRequest, ReadFileResponse>(RPC_METHODS.ReadFile, async (data) => {
         logger.debug('Read file request:', data.path)
 
         const validation = validatePath(data.path, workingDirectory)
@@ -61,7 +53,7 @@ export function registerFileHandlers(rpcHandlerManager: RpcHandlerManager, worki
         }
     })
 
-    rpcHandlerManager.registerHandler<ReadGeneratedImageRequest, ReadGeneratedImageResponse>('readGeneratedImage', async (data) => {
+    rpcHandlerManager.registerHandler<ReadGeneratedImageRequest, ReadGeneratedImageResponse>(RPC_METHODS.ReadGeneratedImage, async (data) => {
         logger.debug('Read generated image request:', data.id)
 
         const image = getGeneratedImage(data.id)
@@ -83,7 +75,7 @@ export function registerFileHandlers(rpcHandlerManager: RpcHandlerManager, worki
         }
     })
 
-    rpcHandlerManager.registerHandler<WriteFileRequest, WriteFileResponse>('writeFile', async (data) => {
+    rpcHandlerManager.registerHandler<WriteFileRequest, WriteFileResponse>(RPC_METHODS.WriteFile, async (data) => {
         logger.debug('Write file request:', data.path)
 
         const validation = validatePath(data.path, workingDirectory)

@@ -505,6 +505,10 @@ const FLAVOR_BADGES: Record<string, { label: string; colors: string }> = {
         label: 'Gm',
         colors: 'bg-[#2563eb] text-white',
     },
+    kimi: {
+        label: 'Km',
+        colors: 'bg-[#7c3aed] text-white',
+    },
     opencode: {
         label: 'Op',
         colors: 'bg-[#15803d] text-white',
@@ -739,6 +743,7 @@ export function SessionList(props: {
     const [collapseOverrides, setCollapseOverrides] = useState<Map<string, boolean>>(
         () => new Map()
     )
+    const autoExpandedSelectedSessionKeyRef = useRef<string | null>(null)
     const isGroupCollapsed = (group: SessionGroup): boolean => {
         if (isSearching) return false
         const override = collapseOverrides.get(group.key)
@@ -812,16 +817,26 @@ export function SessionList(props: {
         })
     }
 
-    // Auto-expand group (and machine) containing selected session
+    // Auto-expand group (and machine) containing the selected session only when
+    // the selected-session/group pair changes. Without this guard, every live
+    // session-list refresh (for example tool-call updates from a running selected
+    // session) reopens a path the user just collapsed.
     useEffect(() => {
-        if (!selectedSessionId) return
-        setCollapseOverrides(prev => {
-            const group = allGroups.find(g =>
-                g.sessions.some(s => s.id === selectedSessionId)
-            )
-            if (!group) return prev
-            return expandSelectedSessionCollapseOverrides(prev, group)
-        })
+        if (!selectedSessionId) {
+            autoExpandedSelectedSessionKeyRef.current = null
+            return
+        }
+
+        const group = allGroups.find(g =>
+            g.sessions.some(s => s.id === selectedSessionId)
+        )
+        if (!group) return
+
+        const autoExpandKey = `${selectedSessionId}::${group.key}`
+        if (autoExpandedSelectedSessionKeyRef.current === autoExpandKey) return
+        autoExpandedSelectedSessionKeyRef.current = autoExpandKey
+
+        setCollapseOverrides(prev => expandSelectedSessionCollapseOverrides(prev, group))
     }, [selectedSessionId, allGroups])
 
     // Clean up stale collapse overrides

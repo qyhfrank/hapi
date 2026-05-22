@@ -71,4 +71,30 @@ describe('resume schemas', () => {
             invokedAt: 123
         }).success).toBe(true)
     })
+
+    it('validates structured session and machine update patches', () => {
+        expect(SyncEventSchema.safeParse({
+            type: 'session-updated',
+            sessionId: 'hapi-session-1',
+            data: { updatedAt: 123, backgroundTaskCount: 1 }
+        }).success).toBe(true)
+
+        expect(SyncEventSchema.safeParse({
+            type: 'session-updated',
+            sessionId: 'hapi-session-1',
+            data: { sid: 'hapi-session-1' }
+        }).success).toBe(false)
+
+        expect(SyncEventSchema.safeParse({
+            type: 'machine-updated',
+            machineId: 'machine-1',
+            data: { active: false }
+        }).success).toBe(true)
+
+        expect(SyncEventSchema.safeParse({
+            type: 'machine-updated',
+            machineId: 'machine-1',
+            data: { id: 'machine-1' }
+        }).success).toBe(false)
+    })
 })

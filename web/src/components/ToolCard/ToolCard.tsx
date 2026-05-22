@@ -6,7 +6,6 @@ import { isObject, safeStringify } from '@hapi/protocol'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CodeBlock } from '@/components/CodeBlock'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
-import { DiffView } from '@/components/DiffView'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { PermissionFooter } from '@/components/ToolCard/PermissionFooter'
 import { AskUserQuestionFooter } from '@/components/ToolCard/AskUserQuestionFooter'
@@ -19,7 +18,7 @@ import { getToolResultViewComponent } from '@/components/ToolCard/views/_results
 import { formatTaskChildLabel, TaskStateIcon } from '@/components/ToolCard/helpers'
 import type { TerminalToolDisplayMode } from '@/hooks/useTerminalToolDisplayMode'
 import { usePointerFocusRing } from '@/hooks/usePointerFocusRing'
-import { getInputString, getInputStringAny, truncate } from '@/lib/toolInputUtils'
+import { getInputStringAny, truncate } from '@/lib/toolInputUtils'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/lib/use-translation'
 import { TraceSection } from '@/components/ToolCard/trace'
@@ -115,29 +114,6 @@ function renderTaskSummary(
     )
 }
 
-function renderEditInput(input: unknown): ReactNode | null {
-    if (!isObject(input)) return null
-    const filePath = getInputStringAny(input, ['file_path', 'path']) ?? undefined
-    const oldString = getInputString(input, 'old_string')
-    const newString = getInputString(input, 'new_string')
-    if (oldString === null || newString === null) return null
-
-    return (
-        <DiffView
-            oldString={oldString}
-            newString={newString}
-            filePath={filePath}
-        />
-    )
-}
-
-function renderExitPlanModeInput(input: unknown): ReactNode | null {
-    if (!isObject(input)) return null
-    const plan = getInputString(input, 'plan')
-    if (!plan) return null
-    return <MarkdownRenderer content={plan} />
-}
-
 function renderToolInput(block: ToolCallBlock, surface: 'inline' | 'dialog' = 'inline'): ReactNode {
     const collapseLongContent = surface === 'inline'
     const codeBlockSurfaceProps = surface === 'dialog'
@@ -148,69 +124,6 @@ function renderToolInput(block: ToolCallBlock, surface: 'inline' | 'dialog' = 'i
 
     if (isSubagentToolName(toolName) && isObject(input) && typeof input.prompt === 'string') {
         return <MarkdownRenderer content={input.prompt} />
-    }
-
-    if (toolName === 'Edit') {
-        const diff = renderEditInput(input)
-        if (diff) return diff
-    }
-
-    if (toolName === 'MultiEdit' && isObject(input)) {
-        const filePath = getInputStringAny(input, ['file_path', 'path']) ?? undefined
-        const edits = Array.isArray(input.edits) ? input.edits : null
-        if (edits && edits.length > 0) {
-            const rendered = edits
-                .slice(0, 3)
-                .map((edit, idx) => {
-                    if (!isObject(edit)) return null
-                    const oldString = getInputString(edit, 'old_string')
-                    const newString = getInputString(edit, 'new_string')
-                    if (oldString === null || newString === null) return null
-                    return (
-                        <div key={idx}>
-                            <DiffView oldString={oldString} newString={newString} filePath={filePath} />
-                        </div>
-                    )
-                })
-                .filter(Boolean)
-
-            if (rendered.length > 0) {
-                return (
-                    <div className="flex flex-col gap-2">
-                        {rendered}
-                        {edits.length > 3 ? (
-                            <div className="text-xs text-[var(--app-hint)]">
-                                (+{edits.length - 3} more edits)
-                            </div>
-                        ) : null}
-                    </div>
-                )
-            }
-        }
-    }
-
-    if (toolName === 'Write' && isObject(input)) {
-        const filePath = getInputStringAny(input, ['file_path', 'path'])
-        const content = getInputStringAny(input, ['content', 'text'])
-        if (filePath && content !== null) {
-            return (
-                <div className="flex flex-col gap-2">
-                    <div className="text-xs text-[var(--app-hint)] font-mono break-all">
-                        {filePath}
-                    </div>
-                    <CodeBlock code={content} language="text" title="Draft" collapseLongContent={collapseLongContent} {...codeBlockSurfaceProps} />
-                </div>
-            )
-        }
-    }
-
-    if (toolName === 'CodexDiff' && isObject(input) && typeof input.unified_diff === 'string') {
-        return <CodeBlock code={input.unified_diff} language="diff" title="Patch" collapseLongContent={collapseLongContent} {...codeBlockSurfaceProps} />
-    }
-
-    if (toolName === 'ExitPlanMode' || toolName === 'exit_plan_mode') {
-        const plan = renderExitPlanModeInput(input)
-        if (plan) return plan
     }
 
     const commandArray = isObject(input) && Array.isArray(input.command) ? input.command : null

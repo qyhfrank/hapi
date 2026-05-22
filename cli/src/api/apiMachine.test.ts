@@ -24,6 +24,7 @@ import type { Machine } from './types'
 function makeMachine(id: string): Machine {
     return {
         id,
+        namespace: 'default',
         seq: 1,
         createdAt: 0,
         updatedAt: 0,

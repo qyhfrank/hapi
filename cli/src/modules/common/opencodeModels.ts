@@ -1,23 +1,14 @@
 import { asString, isObject } from '@hapi/protocol';
+import type { OpencodeModelsResponse, OpencodeModelSummary } from '@hapi/protocol/apiTypes';
 import { AcpStdioTransport } from '@/agent/backends/acp/AcpStdioTransport';
 import packageJson from '../../../package.json';
 import { getErrorMessage } from './rpcResponses';
-
-export interface OpencodeModelSummary {
-    modelId: string;
-    name?: string;
-}
 
 export interface ListOpencodeModelsForCwdRequest {
     cwd?: string;
 }
 
-export interface ListOpencodeModelsForCwdResponse {
-    success: boolean;
-    availableModels?: OpencodeModelSummary[];
-    currentModelId?: string | null;
-    error?: string;
-}
+export type ListOpencodeModelsForCwdResponse = OpencodeModelsResponse;
 
 interface CacheEntry {
     expiresAt: number;

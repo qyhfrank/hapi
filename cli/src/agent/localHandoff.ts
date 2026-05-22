@@ -1,4 +1,5 @@
 import type { SessionEndReason } from '@hapi/protocol'
+import { RPC_METHODS } from '@hapi/protocol/rpcMethods'
 
 type RpcHandlerManagerLike = {
     registerHandler<TRequest = unknown, TResponse = unknown>(
@@ -17,7 +18,7 @@ export function registerLocalHandoffHandler(
     rpcHandlerManager: RpcHandlerManagerLike,
     lifecycle: LocalHandoffLifecycle
 ): void {
-    rpcHandlerManager.registerHandler('handoff-local', () => {
+    rpcHandlerManager.registerHandler(RPC_METHODS.HandoffLocal, () => {
         lifecycle.setArchiveReason('Handed off to local terminal')
         lifecycle.setSessionEndReason('handoff')
         setImmediate(() => {

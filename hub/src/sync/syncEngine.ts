@@ -7,7 +7,8 @@
  * - No E2E encryption; data is stored as JSON in SQLite
  */
 
-import type { LocalResumeTarget, ResumableSession } from '@hapi/protocol'
+import { isKnownFlavor, type LocalResumeTarget, type ResumableSession } from '@hapi/protocol'
+import type { SlashCommandsResponse } from '@hapi/protocol/apiTypes'
 import type { AgentFlavor, CodexCollaborationMode, DecryptedMessage, PermissionMode, Session, SyncEvent } from '@hapi/protocol/types'
 import { unwrapRoleWrappedRecordEnvelope } from '@hapi/protocol/messages'
 import type { Server } from 'socket.io'
@@ -459,7 +460,7 @@ export class SyncEngine {
     async spawnSession(
         machineId: string,
         directory: string,
-        agent: 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode' = 'claude',
+        agent: AgentFlavor = 'claude',
         model?: string,
         modelReasoningEffort?: string,
         yolo?: boolean,
@@ -486,9 +487,7 @@ export class SyncEngine {
 
     private resolveFlavor(session: Session): AgentFlavor {
         const flavor = session.metadata?.flavor
-        return flavor === 'codex' || flavor === 'gemini' || flavor === 'opencode' || flavor === 'cursor'
-            ? flavor
-            : 'claude'
+        return isKnownFlavor(flavor) ? flavor : 'claude'
     }
 
     private resolveAgentResumeId(session: Session, namespace: string): string | null {
@@ -502,6 +501,7 @@ export class SyncEngine {
         if (flavor === 'gemini') return metadata.geminiSessionId ?? null
         if (flavor === 'opencode') return metadata.opencodeSessionId ?? null
         if (flavor === 'cursor') return metadata.cursorSessionId ?? null
+        if (flavor === 'kimi') return metadata.kimiSessionId ?? null
 
         return metadata.claudeSessionId ?? this.recoverClaudeSessionIdFromMessages(session.id, namespace)
     }
@@ -885,11 +885,7 @@ export class SyncEngine {
         return await this.rpcGateway.runRipgrep(sessionId, args, cwd)
     }
 
-    async listSlashCommands(sessionId: string, agent: string): Promise<{
-        success: boolean
-        commands?: Array<{ name: string; description?: string; source: 'builtin' | 'user' | 'plugin' | 'project' }>
-        error?: string
-    }> {
+    async listSlashCommands(sessionId: string, agent: string): Promise<SlashCommandsResponse> {
         return await this.rpcGateway.listSlashCommands(sessionId, agent)
     }
 

@@ -1,27 +1,16 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { PROTOCOL_VERSION } from '@hapi/protocol'
+import {
+    CreateOrLoadMachineRequestSchema,
+    CreateOrLoadSessionRequestSchema,
+    PROTOCOL_VERSION
+} from '@hapi/protocol'
 import { getConfiguration } from '../../configuration'
 import { constantTimeEquals } from '../../utils/crypto'
 import { parseAccessToken } from '../../utils/accessToken'
 import type { Machine, Session, SyncEngine } from '../../sync/syncEngine'
 
 const bearerSchema = z.string().regex(/^Bearer\s+(.+)$/i)
-
-const createOrLoadSessionSchema = z.object({
-    tag: z.string().min(1),
-    metadata: z.unknown(),
-    agentState: z.unknown().nullable().optional(),
-    model: z.string().optional(),
-    modelReasoningEffort: z.string().optional(),
-    effort: z.string().optional()
-})
-
-const createOrLoadMachineSchema = z.object({
-    id: z.string().min(1),
-    metadata: z.unknown(),
-    runnerState: z.unknown().nullable().optional()
-})
 
 const getMessagesQuerySchema = z.object({
     afterSeq: z.coerce.number().int().min(0),
@@ -98,7 +87,7 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
             return c.json({ error: 'Not ready' }, 503)
         }
         const json = await c.req.json().catch(() => null)
-        const parsed = createOrLoadSessionSchema.safeParse(json)
+        const parsed = CreateOrLoadSessionRequestSchema.safeParse(json)
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
         }
@@ -215,7 +204,7 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
             return c.json({ error: 'Not ready' }, 503)
         }
         const json = await c.req.json().catch(() => null)
-        const parsed = createOrLoadMachineSchema.safeParse(json)
+        const parsed = CreateOrLoadMachineRequestSchema.safeParse(json)
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
         }

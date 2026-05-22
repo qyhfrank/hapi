@@ -7,6 +7,7 @@ import { RemoteLauncherBase, type RemoteLauncherDisplayContext, type RemoteLaunc
 import { OpencodeDisplay } from '@/ui/ink/OpencodeDisplay';
 import type { OpencodeSession } from './session';
 import type { PermissionMode } from './types';
+import { RPC_METHODS } from '@hapi/protocol/rpcMethods';
 import { createOpencodeBackend } from './utils/opencodeBackend';
 import { OpencodePermissionHandler } from './utils/permissionHandler';
 import { TITLE_INSTRUCTION } from './utils/systemPrompt';
@@ -95,7 +96,7 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
 
         // Expose the cached models metadata via per-session RPC so the hub can
         // forward it to the web UI's model selector without round-tripping ACP.
-        session.client.rpcHandlerManager.registerHandler('listOpencodeModels', async () => {
+        session.client.rpcHandlerManager.registerHandler(RPC_METHODS.ListOpencodeModels, async () => {
             const metadata = backend.getSessionModelsMetadata?.(acpSessionId);
             if (!metadata) {
                 return { success: true, availableModels: [], currentModelId: null };
@@ -242,6 +243,9 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
                 this.messageBuffer.addMessage(message.text, 'assistant');
                 break;
             case 'reasoning':
+                if (message.live) {
+                    break;
+                }
                 this.messageBuffer.addMessage(`[Thinking] ${message.text.substring(0, 100)}...`, 'system');
                 break;
             case 'tool_call':

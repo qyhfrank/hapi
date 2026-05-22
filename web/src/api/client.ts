@@ -2,17 +2,9 @@ import type {
     AttachmentMetadata,
     AuthResponse,
     CodexCollaborationMode,
-    DeleteUploadResponse,
-    ListDirectoryResponse,
-    FileReadResponse,
     FileSearchResponse,
-    GitCommandResponse,
-    MachineListDirectoryResponse,
-    MachinePathsExistsResponse,
     MachinesResponse,
     MessagesResponse,
-    CodexModelsResponse,
-    OpencodeModelsResponse,
     PermissionMode,
     PushSubscriptionPayload,
     PushUnsubscribePayload,
@@ -20,11 +12,22 @@ import type {
     SlashCommandsResponse,
     SkillsResponse,
     SpawnResponse,
-    UploadFileResponse,
     VisibilityPayload,
     SessionResponse,
     SessionsResponse
 } from '@/types/api'
+import type {
+    CodexModelsResponse,
+    DeleteUploadResponse,
+    FileReadResponse,
+    GitCommandResponse,
+    ListDirectoryResponse,
+    MachineListDirectoryResponse,
+    MachinePathsExistsResponse,
+    OpencodeModelsResponse,
+    UploadFileResponse
+} from '@hapi/protocol/apiTypes'
+import type { AgentFlavor } from '@hapi/protocol'
 import type { CancelMessageResponse } from '@hapi/protocol/schemas'
 
 type ApiClientOptions = {
@@ -459,7 +462,7 @@ export class ApiClient {
     async spawnSession(
         machineId: string,
         directory: string,
-        agent?: 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode',
+        agent?: AgentFlavor,
         model?: string,
         modelReasoningEffort?: string,
         yolo?: boolean,

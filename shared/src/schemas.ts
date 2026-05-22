@@ -38,6 +38,7 @@ export const MetadataSchema = z.object({
     geminiSessionId: z.string().optional(),
     opencodeSessionId: z.string().optional(),
     cursorSessionId: z.string().optional(),
+    kimiSessionId: z.string().optional(),
     tools: z.array(z.string()).optional(),
     slashCommands: z.array(z.string()).optional(),
     homeDir: z.string().optional(),
@@ -210,6 +211,82 @@ export const SessionSchema = z.object({
 
 export type Session = z.infer<typeof SessionSchema>
 
+export const SessionPatchSchema = z.object({
+    active: z.boolean().optional(),
+    thinking: z.boolean().optional(),
+    activeAt: z.number().optional(),
+    updatedAt: z.number().optional(),
+    model: z.string().nullable().optional(),
+    modelReasoningEffort: z.string().nullable().optional(),
+    effort: z.string().nullable().optional(),
+    permissionMode: PermissionModeSchema.optional(),
+    collaborationMode: CodexCollaborationModeSchema.optional(),
+    backgroundTaskCount: z.number().optional()
+}).strict()
+
+export type SessionPatch = z.infer<typeof SessionPatchSchema>
+
+export const MachineMetadataSchema = z.object({
+    host: z.string(),
+    platform: z.string(),
+    happyCliVersion: z.string(),
+    displayName: z.string().optional(),
+    homeDir: z.string().optional(),
+    happyHomeDir: z.string().optional(),
+    happyLibDir: z.string().optional(),
+    workspaceRoots: z.array(z.string()).optional()
+})
+
+export type MachineMetadata = z.infer<typeof MachineMetadataSchema>
+
+export const RunnerStateSchema = z.object({
+    status: z.union([z.enum(['running', 'shutting-down']), z.string()]),
+    pid: z.number().optional(),
+    httpPort: z.number().optional(),
+    startedAt: z.number().optional(),
+    shutdownRequestedAt: z.number().optional(),
+    shutdownSource: z.union([z.enum(['mobile-app', 'cli', 'os-signal', 'unknown']), z.string()]).optional(),
+    lastSpawnError: z.object({
+        message: z.string(),
+        pid: z.number().optional(),
+        exitCode: z.number().nullable().optional(),
+        signal: z.string().nullable().optional(),
+        at: z.number()
+    }).nullable().optional()
+})
+
+export type RunnerState = z.infer<typeof RunnerStateSchema>
+
+export const MachineSchema = z.object({
+    id: z.string(),
+    namespace: z.string(),
+    seq: z.number(),
+    createdAt: z.number(),
+    updatedAt: z.number(),
+    active: z.boolean(),
+    activeAt: z.number(),
+    metadata: MachineMetadataSchema.nullable(),
+    metadataVersion: z.number(),
+    runnerState: RunnerStateSchema.nullable(),
+    runnerStateVersion: z.number()
+})
+
+export type Machine = z.infer<typeof MachineSchema>
+
+export const MachinePatchSchema = z.object({
+    active: z.boolean().optional(),
+    activeAt: z.number().optional(),
+    updatedAt: z.number().optional()
+}).strict()
+
+export type MachinePatch = z.infer<typeof MachinePatchSchema>
+
+export const SessionUpdatedDataSchema = z.union([SessionSchema, SessionPatchSchema])
+export type SessionUpdatedData = z.infer<typeof SessionUpdatedDataSchema>
+
+export const MachineUpdatedDataSchema = z.union([MachineSchema, MachinePatchSchema, z.null()])
+export type MachineUpdatedData = z.infer<typeof MachineUpdatedDataSchema>
+
 const SessionEventBaseSchema = z.object({
     namespace: z.string().optional()
 })
@@ -229,7 +306,7 @@ export const SyncEventSchema = z.discriminatedUnion('type', [
     }),
     SessionChangedSchema.extend({
         type: z.literal('session-updated'),
-        data: z.unknown().optional()
+        data: SessionUpdatedDataSchema.optional()
     }),
     SessionEventBaseSchema.extend({
         type: z.literal('session-removed'),
@@ -248,7 +325,7 @@ export const SyncEventSchema = z.discriminatedUnion('type', [
     }),
     MachineChangedSchema.extend({
         type: z.literal('machine-updated'),
-        data: z.unknown().optional()
+        data: MachineUpdatedDataSchema.optional()
     }),
     SessionEventBaseSchema.extend({
         type: z.literal('toast'),
