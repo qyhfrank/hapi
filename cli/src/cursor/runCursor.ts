@@ -11,6 +11,7 @@ import { createModeChangeHandler, createRunnerLifecycle, setControlledByUser } f
 import { registerSessionConfigRpc } from '@/agent/sessionConfigRpc';
 import { formatMessageWithAttachments } from '@/utils/attachmentFormatter';
 import { getInvokedCwd } from '@/utils/invokedCwd';
+import { enqueueCursorUserMessage } from './cursorUserMessageQueue';
 
 const formatFailureReason = (message: string): string => {
     const maxLength = 200;
@@ -67,7 +68,7 @@ export async function runCursor(opts: {
     const sessionWrapperRef: { current: CursorSession | null } = { current: null };
 
     let currentPermissionMode: PermissionMode = opts.permissionMode ?? 'default';
-    const currentModel = opts.model;
+    let currentModel = opts.model;
 
     const lifecycle = createRunnerLifecycle({
         session,
@@ -85,7 +86,9 @@ export async function runCursor(opts: {
             return;
         }
         sessionInstance.setPermissionMode(currentPermissionMode);
-        logger.debug(`[cursor] Synced session permission mode: ${currentPermissionMode}`);
+        sessionInstance.setModel(currentModel);
+        sessionInstance.pushKeepAlive();
+        logger.debug(`[cursor] Synced session mode: permissionMode=${currentPermissionMode}, model=${currentModel}`);
     };
 
     session.onUserMessage((message, localId) => {
@@ -94,7 +97,7 @@ export async function runCursor(opts: {
             model: currentModel
         };
         const formattedText = formatMessageWithAttachments(message.content.text, message.content.attachments);
-        messageQueue.push(formattedText, enhancedMode, localId);
+        enqueueCursorUserMessage(messageQueue, formattedText, enhancedMode, localId);
     });
 
     session.onCancelQueuedMessage((localId) => {
@@ -106,11 +109,14 @@ export async function runCursor(opts: {
     registerSessionConfigRpc<PermissionMode>({
         rpcHandlerManager: session.rpcHandlerManager,
         flavor: 'cursor',
-        modelMode: 'ignore',
+        modelMode: 'nullable',
         appliedFallback: () => ({ permissionMode: currentPermissionMode }),
         onApply: (config) => {
             if (config.permissionMode !== undefined) {
                 currentPermissionMode = config.permissionMode;
+            }
+            if (config.model !== undefined) {
+                currentModel = config.model ?? undefined;
             }
         },
         onAfterApply: syncSessionMode

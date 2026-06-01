@@ -52,6 +52,7 @@ export const MetadataSchema = z.object({
     lifecycleStateSince: z.number().optional(),
     archivedBy: z.string().optional(),
     archiveReason: z.string().optional(),
+    preferredPermissionMode: PermissionModeSchema.optional(),
     flavor: z.string().nullish(),
     capabilities: SessionCapabilitiesSchema.optional(),
     worktree: WorktreeMetadataSchema.optional()
@@ -318,6 +319,9 @@ export const SyncEventSchema = z.discriminatedUnion('type', [
     }),
     SessionChangedSchema.extend({
         type: z.literal('messages-invalidated')
+    }),
+    SessionChangedSchema.extend({
+        type: z.literal('scheduled-matured')
     }),
     SessionChangedSchema.extend({
         type: z.literal('session-ended'),

@@ -3,12 +3,26 @@ import type { AgentBackend, AgentMessage, AgentSessionConfig, PermissionRequest,
 import { asString, isObject } from '@hapi/protocol';
 import { AcpStdioTransport, type AcpStderrError } from './AcpStdioTransport';
 import { AcpMessageHandler } from './AcpMessageHandler';
+import { ACP_SESSION_UPDATE_TYPES } from './constants';
 import { logger } from '@/ui/logger';
 import { withRetry } from '@/utils/time';
 import packageJson from '../../../../package.json';
 
 type PendingPermission = {
     resolve: (result: { outcome: { outcome: string; optionId?: string } }) => void;
+};
+
+type AcpPromptUsage = {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens?: number;
+    thoughtTokens?: number;
+    cacheReadTokens?: number;
+};
+
+type AcpUsageUpdate = {
+    contextTokens: number | undefined;
+    contextWindow: number | undefined;
 };
 
 export type AcpModelDescriptor = {
@@ -21,17 +35,26 @@ export type AcpSessionModelsMetadata = {
     currentModelId: string | null;
 };
 
+export type AcpConfigOptionDescriptor = {
+    id: string;
+    category?: string;
+    currentValue?: string;
+    options: Array<{ value: string; name?: string }>;
+};
+
 export class AcpSdkBackend implements AgentBackend {
     private transport: AcpStdioTransport | null = null;
     private permissionHandler: ((request: PermissionRequest) => void) | null = null;
     private stderrErrorHandler: ((error: AcpStderrError) => void) | null = null;
     private readonly pendingPermissions = new Map<string, PendingPermission>();
     private readonly sessionModelsMetadata = new Map<string, AcpSessionModelsMetadata>();
+    private readonly sessionConfigOptions = new Map<string, AcpConfigOptionDescriptor[]>();
     private messageHandler: AcpMessageHandler | null = null;
     private activeSessionId: string | null = null;
     private isProcessingMessage = false;
     private responseCompleteResolvers: Array<() => void> = [];
     private lastSessionUpdateAt = 0;
+    private latestUsageUpdate: AcpUsageUpdate | null = null;
 
     /** Retry configuration for ACP initialization */
     private static readonly INIT_RETRY_OPTIONS = {
@@ -43,6 +66,25 @@ export class AcpSdkBackend implements AgentBackend {
     private static readonly UPDATE_DRAIN_TIMEOUT_MS = 2000;
     private static readonly PRE_PROMPT_UPDATE_QUIET_PERIOD_MS = 200;
     private static readonly PRE_PROMPT_UPDATE_DRAIN_TIMEOUT_MS = 1200;
+    // After the initial post-prompt drain, slow-tailing models (DeepSeek,
+    // GPT-5.5, etc.) can keep sending agentMessageChunk notifications. We poll
+    // drainBuffers() on a short interval so the UI keeps streaming smoothly,
+    // and block prompt() from resolving until the model is truly quiet — that
+    // way turn_complete and the launcher's ready signal only fire after every
+    // straggler has been emitted to the current turn's onUpdate. Bounded by
+    // LATE_FLUSH_WINDOW_MS so a stuck stream never wedges the session.
+    //
+    // 6000ms covers tails up to ~5s observed against GPT-5.5 / DeepSeek V4 Pro
+    // with 1s headroom. 250ms quiet is anchored to drainLateBuffers entry
+    // time, so every turn pays at least one quiet period before resolving —
+    // that minimum is what catches stragglers arriving just after
+    // session/prompt resolves when the model paused mid-turn. 50ms polling
+    // keeps the UI responsive without measurable CPU cost (drainBuffers is a
+    // no-op on empty buffers). All three can be tightened once we have
+    // telemetry on real-world tail distributions.
+    private static readonly LATE_FLUSH_INTERVAL_MS = 50;
+    private static readonly LATE_FLUSH_QUIET_PERIOD_MS = 250;
+    private static readonly LATE_FLUSH_WINDOW_MS = 6000;
 
     constructor(private readonly options: { command: string; args?: string[]; env?: Record<string, string> }) {}
 
@@ -120,7 +162,7 @@ export class AcpSdkBackend implements AgentBackend {
         }
 
         this.activeSessionId = sessionId;
-        this.captureSessionModelsMetadata(sessionId, response);
+        this.captureSessionMetadata(sessionId, response);
         return sessionId;
     }
 
@@ -146,7 +188,7 @@ export class AcpSdkBackend implements AgentBackend {
         const loadedSessionId = isObject(response) ? asString(response.sessionId) : null;
         const sessionId = loadedSessionId ?? config.sessionId;
         this.activeSessionId = sessionId;
-        this.captureSessionModelsMetadata(sessionId, response);
+        this.captureSessionMetadata(sessionId, response);
         return sessionId;
     }
 
@@ -183,8 +225,27 @@ export class AcpSdkBackend implements AgentBackend {
         } else {
             // For other flavors (e.g. Gemini), if the response carries metadata,
             // capture it. Missing fields are silently ignored.
-            this.captureSessionModelsMetadata(sessionId, response);
+            this.captureSessionMetadata(sessionId, response);
         }
+    }
+
+    async setConfigOption(
+        sessionId: string,
+        configId: string,
+        value: string
+    ): Promise<void> {
+        if (!this.transport) {
+            throw new Error('ACP transport not initialized');
+        }
+
+        await this.waitForResponseComplete();
+
+        const response = await this.transport.sendRequest('session/set_config_option', {
+            sessionId,
+            configId,
+            value
+        });
+        this.captureSessionMetadata(sessionId, response);
     }
 
     /**
@@ -194,6 +255,10 @@ export class AcpSdkBackend implements AgentBackend {
      */
     getSessionModelsMetadata(sessionId: string): AcpSessionModelsMetadata | undefined {
         return this.sessionModelsMetadata.get(sessionId);
+    }
+
+    getThoughtLevelConfigOption(sessionId: string): AcpConfigOptionDescriptor | undefined {
+        return this.sessionConfigOptions.get(sessionId)?.find((option) => option.category === 'thought_level');
     }
 
     async prompt(
@@ -206,20 +271,23 @@ export class AcpSdkBackend implements AgentBackend {
         }
 
         this.activeSessionId = sessionId;
+        // Single-phase handler swap: drain any chunks still buffered in the
+        // previous turn's handler so they emit via that turn's onUpdate, then
+        // immediately install the new handler. The post-prompt drainLateBuffers
+        // means by this point the previous turn should already be quiet; this
+        // wait is a cheap safety net for the rare case where a chunk arrived
+        // between prompt() resolving and the next turn starting.
         await this.waitForSessionUpdateQuiet(
             AcpSdkBackend.PRE_PROMPT_UPDATE_QUIET_PERIOD_MS,
             AcpSdkBackend.PRE_PROMPT_UPDATE_DRAIN_TIMEOUT_MS
         );
         this.messageHandler?.drainBuffers();
-        this.messageHandler = null;
-        await this.waitForSessionUpdateQuiet(
-            AcpSdkBackend.PRE_PROMPT_UPDATE_QUIET_PERIOD_MS,
-            AcpSdkBackend.PRE_PROMPT_UPDATE_DRAIN_TIMEOUT_MS
-        );
         this.messageHandler = new AcpMessageHandler(onUpdate);
         this.isProcessingMessage = true;
         this.lastSessionUpdateAt = Date.now();
+        this.latestUsageUpdate = null;
         let stopReason: string | null = null;
+        let promptUsage: AcpPromptUsage | null = null;
 
         try {
             // No timeout for prompt requests - they can run for extended periods
@@ -230,13 +298,47 @@ export class AcpSdkBackend implements AgentBackend {
             }, { timeoutMs: Infinity });
 
             stopReason = isObject(response) ? asString(response.stopReason) : null;
+            promptUsage = this.extractPromptUsage(response);
         } finally {
             await this.waitForSessionUpdateQuiet(
                 AcpSdkBackend.UPDATE_QUIET_PERIOD_MS,
                 AcpSdkBackend.UPDATE_DRAIN_TIMEOUT_MS
             );
             this.messageHandler?.drainBuffers();
+            // Block here until the model truly stops streaming straggler
+            // chunks (or LATE_FLUSH_WINDOW_MS elapses), so turn_complete and
+            // the launcher's ready signal only fire once every chunk has been
+            // emitted to this turn's onUpdate.
+            await this.drainLateBuffers();
             try {
+                const latestUsageUpdate = this.readLatestUsageUpdate();
+                if (promptUsage) {
+                    onUpdate({
+                        type: 'usage',
+                        inputTokens: promptUsage.inputTokens,
+                        outputTokens: promptUsage.outputTokens,
+                        totalTokens: promptUsage.totalTokens,
+                        thoughtTokens: promptUsage.thoughtTokens,
+                        cacheReadTokens: promptUsage.cacheReadTokens,
+                        contextTokens: latestUsageUpdate ? latestUsageUpdate.contextTokens : undefined,
+                        contextWindow: latestUsageUpdate ? latestUsageUpdate.contextWindow : undefined
+                    });
+                } else if (
+                    latestUsageUpdate
+                    && (latestUsageUpdate.contextTokens !== undefined || latestUsageUpdate.contextWindow !== undefined)
+                ) {
+                    // Agent did not return prompt usage (slash-handled turns,
+                    // errored turns), but we did see ACP usage updates during
+                    // the turn. Emit a context-only usage so the status bar
+                    // reflects the current context size.
+                    onUpdate({
+                        type: 'usage',
+                        inputTokens: 0,
+                        outputTokens: 0,
+                        contextTokens: latestUsageUpdate.contextTokens,
+                        contextWindow: latestUsageUpdate.contextWindow
+                    });
+                }
                 if (stopReason) {
                     onUpdate({ type: 'turn_complete', stopReason });
                 }
@@ -336,7 +438,53 @@ export class AcpSdkBackend implements AgentBackend {
         }
         this.lastSessionUpdateAt = Date.now();
         const update = params.update;
+        this.captureUsageUpdate(update);
         this.messageHandler?.handleUpdate(update);
+    }
+
+    private captureUsageUpdate(update: unknown): void {
+        if (!isObject(update)) return;
+        if (asString(update.sessionUpdate) !== ACP_SESSION_UPDATE_TYPES.usageUpdate) return;
+
+        const contextTokens = this.asFiniteNumber(update.used);
+        const contextWindow = this.asFiniteNumber(update.size);
+        this.latestUsageUpdate = {
+            contextTokens: contextTokens ?? undefined,
+            contextWindow: contextWindow ?? undefined
+        };
+    }
+
+    private readLatestUsageUpdate(): AcpUsageUpdate | null {
+        return this.latestUsageUpdate;
+    }
+
+    /**
+     * Poll drainBuffers() on a short interval until the model has been quiet
+     * for LATE_FLUSH_QUIET_PERIOD_MS or LATE_FLUSH_WINDOW_MS elapses. Polling
+     * keeps the UI streaming smoothly while we wait; the quiet-window check
+     * lets fast models exit almost immediately (Claude tail typically < 100ms)
+     * while still bounding slow-tailing models (GPT-5.5, DeepSeek V4 Pro).
+     *
+     * The quiet measurement is anchored to entry time, not just
+     * lastSessionUpdateAt: if session/prompt paused mid-turn (chunks → pause
+     * → stopReason), lastSessionUpdateAt is already stale on entry and we
+     * would otherwise exit immediately, missing any straggler that arrives
+     * just after session/prompt resolves.
+     */
+    private async drainLateBuffers(): Promise<void> {
+        const quietBaseline = Date.now();
+        const deadline = quietBaseline + AcpSdkBackend.LATE_FLUSH_WINDOW_MS;
+        while (Date.now() < deadline) {
+            const latestActivityAt = Math.max(this.lastSessionUpdateAt, quietBaseline);
+            const elapsedSinceUpdate = Date.now() - latestActivityAt;
+            if (elapsedSinceUpdate >= AcpSdkBackend.LATE_FLUSH_QUIET_PERIOD_MS) {
+                return;
+            }
+            const remainingBudget = deadline - Date.now();
+            const waitMs = Math.max(1, Math.min(AcpSdkBackend.LATE_FLUSH_INTERVAL_MS, remainingBudget));
+            await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+            this.messageHandler?.drainBuffers();
+        }
     }
 
     private async waitForSessionUpdateQuiet(quietMs: number, timeoutMs: number): Promise<void> {
@@ -434,6 +582,64 @@ export class AcpSdkBackend implements AgentBackend {
         });
     }
 
+    private extractPromptUsage(response: unknown): AcpPromptUsage | null {
+        if (!isObject(response) || !isObject(response.usage)) return null;
+        const usage = response.usage;
+        const inputTokens = this.asFiniteNumber(usage.inputTokens ?? usage.input_tokens);
+        const outputTokens = this.asFiniteNumber(usage.outputTokens ?? usage.output_tokens);
+        if (inputTokens === null || outputTokens === null) return null;
+
+        return {
+            inputTokens,
+            outputTokens,
+            totalTokens: this.asFiniteNumber(usage.totalTokens ?? usage.total_tokens) ?? undefined,
+            thoughtTokens: this.asFiniteNumber(usage.thoughtTokens ?? usage.thought_tokens) ?? undefined,
+            cacheReadTokens: this.asFiniteNumber(
+                usage.cachedReadTokens
+                ?? usage.cached_read_tokens
+                ?? usage.cachedInputTokens
+                ?? usage.cached_input_tokens
+            ) ?? undefined
+        };
+    }
+
+    private asFiniteNumber(value: unknown): number | null {
+        return typeof value === 'number' && Number.isFinite(value) ? value : null;
+    }
+
+
+    private captureSessionMetadata(sessionId: string, response: unknown): void {
+        this.captureSessionModelsMetadata(sessionId, response);
+        this.captureSessionConfigOptions(sessionId, response);
+    }
+
+    private captureSessionConfigOptions(sessionId: string, response: unknown): void {
+        if (!isObject(response) || !Array.isArray(response.configOptions)) return;
+
+        const options = response.configOptions
+            .filter((entry): entry is Record<string, unknown> => isObject(entry))
+            .map((entry): AcpConfigOptionDescriptor | null => {
+                const id = asString(entry.id);
+                if (!id) return null;
+                const rawOptions = Array.isArray(entry.options) ? entry.options : [];
+                return {
+                    id,
+                    category: asString(entry.category) ?? undefined,
+                    currentValue: asString(entry.currentValue) ?? undefined,
+                    options: rawOptions
+                        .filter((option): option is Record<string, unknown> => isObject(option))
+                        .map((option) => ({
+                            value: asString(option.value) ?? '',
+                            name: asString(option.name) ?? undefined
+                        }))
+                        .filter((option) => option.value.length > 0)
+                };
+            })
+            .filter((entry): entry is AcpConfigOptionDescriptor => entry !== null);
+
+        this.sessionConfigOptions.set(sessionId, options);
+    }
+
     /**
      * Extract `availableModels` and `currentModelId` from an ACP response and
      * store them keyed by sessionId. Both top-level and nested-under-`models`
@@ -442,6 +648,24 @@ export class AcpSdkBackend implements AgentBackend {
      * expose model metadata (e.g. current Gemini ACP build) simply leave the
      * cache untouched.
      */
+    private extractModelConfigOption(response: Record<string, unknown>): {
+        currentValue: string | null;
+        options: unknown[];
+    } | null {
+        if (!Array.isArray(response.configOptions)) return null;
+
+        for (const entry of response.configOptions) {
+            if (!isObject(entry)) continue;
+            if (asString(entry.category) !== 'model') continue;
+            return {
+                currentValue: asString(entry.currentValue),
+                options: Array.isArray(entry.options) ? entry.options : []
+            };
+        }
+
+        return null;
+    }
+
     private captureSessionModelsMetadata(sessionId: string, response: unknown): void {
         if (!isObject(response)) return;
 
@@ -451,16 +675,17 @@ export class AcpSdkBackend implements AgentBackend {
         const nestedList = nested?.availableModels;
         const nestedCurrent = nested?.currentModelId;
 
+        const configModelOption = this.extractModelConfigOption(response);
         const rawModels = Array.isArray(directList)
             ? directList
             : Array.isArray(nestedList)
                 ? nestedList
-                : null;
+                : configModelOption?.options ?? null;
         const rawCurrent = typeof directCurrent === 'string'
             ? directCurrent
             : typeof nestedCurrent === 'string'
                 ? nestedCurrent
-                : null;
+                : configModelOption?.currentValue ?? null;
 
         if (rawModels === null && rawCurrent === null) {
             return;
@@ -470,7 +695,7 @@ export class AcpSdkBackend implements AgentBackend {
         if (Array.isArray(rawModels)) {
             for (const entry of rawModels) {
                 if (!isObject(entry)) continue;
-                const modelId = asString(entry.modelId);
+                const modelId = asString(entry.modelId) ?? asString(entry.value);
                 if (!modelId) continue;
                 const name = asString(entry.name) ?? undefined;
                 availableModels.push(name ? { modelId, name } : { modelId });

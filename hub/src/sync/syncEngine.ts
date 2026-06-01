@@ -26,7 +26,9 @@ import {
     type RpcGeneratedImageResponse,
     type RpcListDirectoryResponse,
     type RpcListCodexModelsResponse,
+    type RpcListCursorModelsResponse,
     type RpcListOpencodeModelsResponse,
+    type RpcCursorModel,
     type RpcOpencodeModel,
     type RpcPathExistsResponse,
     type RpcReadFileResponse,
@@ -44,7 +46,9 @@ export type {
     RpcGeneratedImageResponse,
     RpcListDirectoryResponse,
     RpcListCodexModelsResponse,
+    RpcListCursorModelsResponse,
     RpcListOpencodeModelsResponse,
+    RpcCursorModel,
     RpcOpencodeModel,
     RpcPathExistsResponse,
     RpcReadFileResponse,
@@ -172,6 +176,10 @@ export class SyncEngine {
         return this.sessionCache.getSessionsByNamespace(namespace)
     }
 
+    getFutureScheduledMessageCounts(sessionIds: string[], now: number = Date.now()): Map<string, number> {
+        return this.store.messages.countFutureScheduledBySessionIds(sessionIds, now)
+    }
+
     getSession(sessionId: string): Session | undefined {
         return this.sessionCache.getSession(sessionId) ?? this.sessionCache.refreshSession(sessionId) ?? undefined
     }
@@ -283,6 +291,10 @@ export class SyncEngine {
         this.triggerDedupIfNeeded(payload.sid)
     }
 
+    clearQueuedThinkingGrace(sessionId: string): void {
+        this.sessionCache.clearQueuedThinkingGrace(sessionId)
+    }
+
     handleSessionEnd(payload: { sid: string; time: number; reason?: 'completed' | 'terminated' | 'error' }): void {
         this.sessionCache.handleSessionEnd(payload)
         this.eventPublisher.emit({
@@ -364,6 +376,7 @@ export class SyncEngine {
     ): Promise<void> {
         await this.messageService.sendMessage(sessionId, payload)
         this.sessionCache.markMessageQueued(sessionId)
+        this.sessionCache.recordSessionActivity(sessionId, Date.now())
     }
 
     async cancelQueuedMessage(
@@ -454,6 +467,13 @@ export class SyncEngine {
             throw new Error('Missing applied session config')
         }
 
+        const requestedKeys = Object.keys(config) as Array<keyof typeof config>
+        for (const key of requestedKeys) {
+            if (!(key in applied)) {
+                throw new Error(`Session did not apply ${key}`)
+            }
+        }
+
         this.sessionCache.applySessionConfig(sessionId, applied)
     }
 
@@ -524,7 +544,11 @@ export class SyncEngine {
 
         const agentSessionId = this.resolveAgentResumeId(session, namespace)
         if (!agentSessionId) {
-            return { type: 'error', message: 'Resume session ID unavailable', code: 'resume_unavailable' }
+            return {
+                type: 'error',
+                message: 'Resume session ID unavailable. Start a new session in this directory, or retry after the agent has initialized.',
+                code: 'resume_unavailable'
+            }
         }
 
         return {
@@ -593,6 +617,18 @@ export class SyncEngine {
         return undefined
     }
 
+    /** Inactive session with directory path but no agent thread and no prior user turn. */
+    private canFreshSpawnNeverStartedSession(session: Session, sessionId: string, namespace: string): boolean {
+        const metadata = session.metadata
+        if (!metadata || typeof metadata.path !== 'string' || metadata.path.length === 0) {
+            return false
+        }
+        if (this.resolveAgentResumeId(session, namespace)) {
+            return false
+        }
+        return this.store.messages.getFirstMessages(sessionId, 1).length === 0
+    }
+
     async resumeSession(sessionId: string, namespace: string, opts?: { permissionMode?: PermissionMode }): Promise<ResumeSessionResult> {
         const access = this.sessionCache.resolveSessionAccess(sessionId, namespace)
         if (!access.ok) {
@@ -609,14 +645,27 @@ export class SyncEngine {
         }
 
         const targetResult = this.resolveLocalResumeTarget(access.sessionId, namespace)
-        if (targetResult.type === 'error') {
+        let flavor: AgentFlavor
+        let resumeToken: string | undefined
+        let directory: string
+
+        if (targetResult.type === 'success') {
+            flavor = targetResult.target.flavor
+            resumeToken = targetResult.target.agentSessionId
+            directory = targetResult.target.directory
+        } else if (
+            targetResult.code === 'resume_unavailable'
+            && this.canFreshSpawnNeverStartedSession(session, access.sessionId, namespace)
+        ) {
+            const metadata = session.metadata!
+            flavor = this.resolveFlavor(session)
+            resumeToken = undefined
+            directory = metadata.path
+        } else {
             return targetResult
         }
 
-        const target = targetResult.target
         const metadata = session.metadata!
-        const flavor = target.flavor
-        const resumeToken = target.agentSessionId
 
         const onlineMachines = this.machineCache.getOnlineMachinesByNamespace(namespace)
         if (onlineMachines.length === 0) {
@@ -639,10 +688,12 @@ export class SyncEngine {
             return { type: 'error', message: 'No machine online', code: 'no_machine_online' }
         }
 
-        const effectivePermissionMode = opts?.permissionMode ?? session.permissionMode ?? undefined
+        const preferredPermissionMode = opts?.permissionMode
+            ?? session.permissionMode
+            ?? session.metadata?.preferredPermissionMode
         const spawnResult = await this.rpcGateway.spawnSession(
             targetMachine.id,
-            target.directory,
+            directory,
             flavor,
             session.model ?? undefined,
             session.modelReasoningEffort ?? undefined,
@@ -651,7 +702,7 @@ export class SyncEngine {
             undefined,
             resumeToken,
             session.effort ?? undefined,
-            effectivePermissionMode
+            preferredPermissionMode
         )
 
         if (spawnResult.type !== 'success') {
@@ -662,6 +713,9 @@ export class SyncEngine {
         if (!becameActive) {
             return { type: 'error', message: 'Session failed to become active', code: 'resume_failed' }
         }
+
+        // permissionMode is passed to spawnSession above; do not call set-session-config here.
+        // session-alive can arrive before the CLI registers that RPC handler, which caused resume_failed.
 
         if (spawnResult.sessionId !== access.sessionId) {
             // The old session may have already been merged by the automatic dedup path
@@ -889,12 +943,12 @@ export class SyncEngine {
         return await this.rpcGateway.listSlashCommands(sessionId, agent)
     }
 
-    async listSkills(sessionId: string): Promise<{
+    async listSkills(sessionId: string, flavor?: string): Promise<{
         success: boolean
         skills?: Array<{ name: string; description?: string }>
         error?: string
     }> {
-        return await this.rpcGateway.listSkills(sessionId)
+        return await this.rpcGateway.listSkills(sessionId, flavor)
     }
 
     async listCodexModelsForSession(sessionId: string): Promise<RpcListCodexModelsResponse> {
@@ -903,6 +957,14 @@ export class SyncEngine {
 
     async listCodexModelsForMachine(machineId: string): Promise<RpcListCodexModelsResponse> {
         return await this.rpcGateway.listCodexModelsForMachine(machineId)
+    }
+
+    async listCursorModelsForSession(sessionId: string): Promise<RpcListCursorModelsResponse> {
+        return await this.rpcGateway.listCursorModelsForSession(sessionId)
+    }
+
+    async listCursorModelsForMachine(machineId: string): Promise<RpcListCursorModelsResponse> {
+        return await this.rpcGateway.listCursorModelsForMachine(machineId)
     }
 
     async listOpencodeModelsForSession(sessionId: string): Promise<RpcListOpencodeModelsResponse> {
