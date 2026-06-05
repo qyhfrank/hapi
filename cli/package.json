@@ -1,6 +1,6 @@
 {
   "name": "@frankqing/hapi",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "description": "App for agentic coding - access coding agent anywhere",
   "author": "Kirill Dubovitskiy & weishu",
   "license": "AGPL-3.0-only",
@@ -26,11 +26,11 @@
     }
   },
   "optionalDependencies": {
-    "@frankqing/hapi-darwin-arm64": "0.19.0",
-    "@frankqing/hapi-darwin-x64": "0.19.0",
-    "@frankqing/hapi-linux-arm64": "0.19.0",
-    "@frankqing/hapi-linux-x64": "0.19.0",
-    "@frankqing/hapi-win32-x64": "0.19.0"
+    "@frankqing/hapi-darwin-arm64": "0.20.0",
+    "@frankqing/hapi-darwin-x64": "0.20.0",
+    "@frankqing/hapi-linux-arm64": "0.20.0",
+    "@frankqing/hapi-linux-x64": "0.20.0",
+    "@frankqing/hapi-win32-x64": "0.20.0"
   },
   "scripts": {
     "postinstall": "node -e \"try{require('fs').chmodSync(require('path').join(__dirname,'bin','hapi.cjs'),0o755)}catch(e){}\"",
